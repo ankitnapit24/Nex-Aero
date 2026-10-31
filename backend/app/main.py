@@ -25,6 +25,6 @@ app.include_router(alert.router, prefix=f"{settings.API_PREFIX}/alerts", tags=["
 @app.get("/")
 def root():
     return {
-        "message": "Welcome to AeroGuard AI API. See /docs for interactive Swagger documentation.",
+        "message": "Welcome to Nex Aero API. See /docs for interactive Swagger documentation.",
         "status": "healthy"
     }

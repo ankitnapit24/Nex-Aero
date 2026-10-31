@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Dataset Preparation Script
+Nex Aero - Dataset Preparation Script
 Loads raw NASA C-MAPSS FD001 data, calculates RUL labels, and saves structured processed data.
 """
 

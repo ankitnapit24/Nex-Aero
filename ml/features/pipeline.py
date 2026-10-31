@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Feature Engineering & Pipeline Utilities
+Nex Aero - Feature Engineering & Pipeline Utilities
 Ensures zero data leakage: transforms and window calculations are strictly chronological per engine.
 """
 

@@ -1,5 +1,5 @@
 """
-AeroGuard AI - SHAP Explainability Engine
+Nex Aero - SHAP Explainability Engine
 Generates genuine local TreeSHAP feature attributions and global feature rankings
 for Random Forest RUL predictions on turbofan engine telemetry.
 """

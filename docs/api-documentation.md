@@ -1,6 +1,6 @@
-# AeroGuard AI - REST API Documentation
+# Nex Aero - REST API Documentation
 
-AeroGuard AI exposes high-performance RESTful APIs built on FastAPI to serve real-time Remaining Useful Life (RUL) inference, telemetry streaming, unsupervised anomaly detection, TreeSHAP local explainability, persistent maintenance alerts, and degradation replay simulation.
+Nex Aero exposes high-performance RESTful APIs built on FastAPI to serve real-time Remaining Useful Life (RUL) inference, telemetry streaming, unsupervised anomaly detection, TreeSHAP local explainability, persistent maintenance alerts, and degradation replay simulation.
 
 ## Base URL
 - Default local server: `http://localhost:8000`
@@ -19,7 +19,7 @@ Returns operational system state, database connectivity status, and ML model art
 {
   "status": "online",
   "system_state": "ONLINE",
-  "service": "AeroGuard AI",
+  "service": "Nex Aero",
   "version": "1.0.0",
   "model_loaded": true,
   "metadata_loaded": true,

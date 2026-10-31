@@ -7,16 +7,16 @@ export default function Header({ collapsed }) {
   const location = useLocation();
   const [backendStatus, setBackendStatus] = useState({ online: false, modelLoaded: false });
   const [isDark, setIsDark] = useState(() => {
-    return localStorage.getItem('aeroguard-theme') === 'dark';
+    return (localStorage.getItem('nex-aero-theme') || localStorage.getItem('aeroguard-theme')) === 'dark';
   });
 
   useEffect(() => {
     if (isDark) {
       document.documentElement.classList.add('dark');
-      localStorage.setItem('aeroguard-theme', 'dark');
+      localStorage.setItem('nex-aero-theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
-      localStorage.setItem('aeroguard-theme', 'light');
+      localStorage.setItem('nex-aero-theme', 'light');
     }
   }, [isDark]);
 
@@ -49,7 +49,7 @@ export default function Header({ collapsed }) {
           to="/"
           className="text-[#656D76] dark:text-[#9198A1] hover:text-[#1F2328] dark:hover:text-[#E6EDF3] font-medium"
         >
-          AeroGuard
+          Nex Aero
         </Link>
         <ChevronRight className="w-3.5 h-3.5 text-[#848D97] dark:text-[#7D8590]" />
         <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">

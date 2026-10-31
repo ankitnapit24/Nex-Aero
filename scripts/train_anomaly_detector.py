@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Unsupervised Anomaly Detection Module
+Nex Aero - Unsupervised Anomaly Detection Module
 Trains an IsolationForest model on healthy baseline turbofan cycles (first 30 cycles of engines)
 to establish nominal multi-sensor operating boundaries and identify degradation anomalies.
 """
@@ -25,7 +25,7 @@ MODELS_DIR = os.path.join(BASE_DIR, "ml", "models")
 
 def train_isolation_forest():
     print("=" * 60)
-    print("AeroGuard AI - Training Isolation Forest Sensor Anomaly Detector")
+    print("Nex Aero - Training Isolation Forest Sensor Anomaly Detector")
     print("=" * 60)
 
     train_df = load_cmapss_train(DATA_DIR)

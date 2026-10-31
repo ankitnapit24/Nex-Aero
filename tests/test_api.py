@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Backend API Integration Tests
+Nex Aero - Backend API Integration Tests
 Directly tests API route handlers, database persistence, replay simulation, and anomaly detection.
 """
 

@@ -144,7 +144,7 @@ export default function Maintenance() {
           <PanelHeading title="Work order review" description="Draft for qualified personnel to review; not an approved maintenance instruction." />
           {selectedAlert ? (
             <div className="work-order-content">
-              <div className="work-order-reference"><FileText size={16} /><span>{t('Work order reference')}</span><strong>WO-AGY-ALT-{String(selectedAlert.id).padStart(4, '0')}</strong></div>
+              <div className="work-order-reference"><FileText size={16} /><span>{t('Work order reference')}</span><strong>WO-NEX-ALT-{String(selectedAlert.id).padStart(4, '0')}</strong></div>
               <dl className="work-order-facts">
                 <div><dt>{t('Engine')}</dt><dd><Link to={`/engines/${selectedAlert.engine_id}`}>{formatEngine(selectedAlert.engine_id)}</Link></dd></div>
                 <div><dt>{t('Observed cycle')}</dt><dd>{selectedAlert.cycle}</dd></div>

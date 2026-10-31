@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Unit Tests for ML Inference and Prediction Service
+Nex Aero - Unit Tests for ML Inference and Prediction Service
 """
 
 import os

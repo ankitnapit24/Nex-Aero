@@ -1,6 +1,6 @@
-# AeroGuard AI - System Architecture
+# Nex Aero - System Architecture
 
-AeroGuard AI is an end-to-end predictive-maintenance decision-support prototype for aircraft turbofan engines, trained on the NASA C-MAPSS dataset.
+Nex Aero is an end-to-end predictive-maintenance decision-support prototype for aircraft turbofan engines, trained on the NASA C-MAPSS dataset.
 
 ## System Overview
 
@@ -39,7 +39,7 @@ flowchart TD
    - Test labels (`RUL_FD001.txt`) are reserved exclusively for terminal cycle evaluation and never used during training, feature selection, or tuning.
 
 2. **Aviation Safety & Responsible AI Framing:**
-   - AeroGuard AI outputs are non-authoritative research estimates for maintenance planning triage.
+   - Nex Aero outputs are non-authoritative research estimates for maintenance planning triage.
    - Outputs are explicitly disclaimed as decision-support heuristics; they do not certify aircraft airworthiness.
    - Negative predicted values are bounded to zero only as a presentation guard, with raw model output logged.
 

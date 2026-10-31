@@ -1,5 +1,5 @@
 """
-AeroGuard AI - ML Configuration & Column Constants
+Nex Aero - ML Configuration & Column Constants
 Standard definitions for NASA C-MAPSS FD001 dataset processing.
 """
 

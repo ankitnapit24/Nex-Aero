@@ -96,7 +96,7 @@ export function Disclaimer() {
   const { t } = usePreferences();
   return (
     <Notice>
-      {t('AeroGuard AI is an experimental research prototype. Estimates and assessment priorities require qualified human review; this system does not certify airworthiness or authorize maintenance.')}
+      {t('Nex Aero is an experimental research prototype. Estimates and assessment priorities require qualified human review; this system does not certify airworthiness or authorize maintenance.')}
     </Notice>
   );
 }
