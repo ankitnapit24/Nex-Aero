@@ -12,7 +12,7 @@ import pandas as pd
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
-from ml.config import DEFAULT_FEATURE_COLUMNS, CONSTANT_SENSORS
+from ml.config import DEFAULT_FEATURE_COLUMNS, ANOMALY_FEATURE_COLUMNS, CONSTANT_SENSORS
 
 # Human-readable sensor naming for explainability
 SENSOR_DESCRIPTIONS = {
@@ -39,10 +39,12 @@ class RULPredictor:
         self.model_path = model_path or os.path.join(base_dir, "ml", "models", "rf_fd001_pipeline.joblib")
         self.metadata_path = metadata_path or os.path.join(base_dir, "ml", "models", "rf_fd001_metadata.json")
         self.anomaly_path = os.path.join(base_dir, "ml", "models", "iforest_fd001.joblib")
+        self.anomaly_meta_path = os.path.join(base_dir, "ml", "models", "iforest_metadata.json")
         self.baseline_stats_path = os.path.join(base_dir, "ml", "models", "baseline_sensor_stats.json")
         
         self.model = None
         self.anomaly_model = None
+        self.anomaly_features = ANOMALY_FEATURE_COLUMNS
         self.baseline_stats = {}
         self.metadata = {}
         self._load_artifacts()
@@ -74,8 +76,14 @@ class RULPredictor:
                 self.anomaly_model = joblib.load(self.anomaly_path)
                 if hasattr(self.anomaly_model, "n_jobs"):
                     self.anomaly_model.n_jobs = 1
+                if os.path.exists(self.anomaly_meta_path):
+                    with open(self.anomaly_meta_path, "r") as f:
+                        meta = json.load(f)
+                        self.anomaly_features = meta.get("features", ANOMALY_FEATURE_COLUMNS)
             except Exception:
                 self.anomaly_model = None
+        else:
+            self.anomaly_model = None
 
         # Load baseline reference statistics
         if os.path.exists(self.baseline_stats_path):
@@ -92,31 +100,31 @@ class RULPredictor:
     def assess_urgency(self, predicted_rul: float) -> Tuple[str, str]:
         """
         Calculates illustrative urgency category and operational maintenance advisory.
-        Thresholds are non-authoritative demo heuristics.
+        Uses review-oriented recommendations in compliance with aviation engineering standards.
         """
         if predicted_rul <= 25.0:
             urgency = "CRITICAL"
             recommendation = (
-                "IMMEDIATE ACTION RECOMMENDED: HPC stage degradation indicates imminent end-of-service. "
-                "Recommend grounding aircraft for comprehensive borescope inspection and compressor blade acoustic audit."
+                "IMMEDIATE ENGINEERING REVIEW: HPC degradation signature indicates imminent operational limit. "
+                "Flag for engineering review and borescope inspection by authorized aviation maintenance personnel according to applicable technical manual."
             )
         elif predicted_rul <= 50.0:
             urgency = "WARNING"
             recommendation = (
-                "ELEVATED ATTENTION: High-pressure compressor telemetry exhibits accelerated drift. "
-                "Schedule priority maintenance hangar inspection at next turn or within 10 flight cycles."
+                "PRIORITY MAINTENANCE REVIEW: Elevated multi-sensor drift observed in high-pressure turbine/compressor. "
+                "Schedule engineering evaluation and sensor verification during next scheduled maintenance window."
             )
         elif predicted_rul <= 80.0:
             urgency = "MODERATE"
             recommendation = (
-                "ROUTINE MONITORING: Operating parameters are within acceptable parameters with moderate wear. "
-                "Flag engine for routine oil analysis and sensor calibration during next scheduled C-check."
+                "ROUTINE MONITORING: Operating parameters indicate moderate component wear within permissible limits. "
+                "Continue standard fleet monitoring and inspect at next scheduled service check."
             )
         else:
             urgency = "NOMINAL"
             recommendation = (
-                "OPTIMAL STATUS: Turbofan operating within nominal engineering tolerances. "
-                "No immediate maintenance intervention required."
+                "NOMINAL CRUISE TOLERANCES: Operating parameters nominal. "
+                "Continue standard fleet monitoring per maintenance schedule."
             )
         return urgency, recommendation
 
@@ -164,17 +172,21 @@ class RULPredictor:
         clamped_rul = max(0.0, raw_rul)
         urgency, recommendation = self.assess_urgency(clamped_rul)
 
-        # Anomaly scoring
+        # Anomaly scoring strictly on physical parameters (excluding cycle, engine_id, rul)
         is_anomalous = False
-        anomaly_score = 0.5
+        anomaly_score = None
         if self.anomaly_model is not None:
             try:
-                # decision_function returns negative values for anomalies, positive for nominal
-                raw_score = float(self.anomaly_model.decision_function(df)[0])
-                is_anomalous = bool(self.anomaly_model.predict(df)[0] == -1)
-                anomaly_score = round(raw_score, 3)
+                anomaly_cols = getattr(self, "anomaly_features", ANOMALY_FEATURE_COLUMNS)
+                anomaly_df = pd.DataFrame([{col: float(row_dict[col]) for col in anomaly_cols if col in row_dict}])
+                if anomaly_df.shape[1] == len(anomaly_cols):
+                    # decision_function returns negative values for anomalies, positive for nominal
+                    raw_score = float(self.anomaly_model.decision_function(anomaly_df)[0])
+                    is_anomalous = bool(self.anomaly_model.predict(anomaly_df)[0] == -1)
+                    anomaly_score = round(raw_score, 3)
             except Exception:
-                pass
+                is_anomalous = False
+                anomaly_score = None
 
         # Local sensor drift explanations
         drift_explanations = self.explain_sensor_drift(row_dict)

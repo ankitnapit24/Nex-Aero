@@ -9,6 +9,7 @@ from backend.app.database.models import PredictionLog
 from backend.app.schemas.prediction import TelemetryInput, PredictionResponse, PredictionRecordItem, ReplayStep
 from backend.app.services.engine_service import engine_service
 from ml.inference.predictor import RULPredictor
+from ml.inference.explainer import shap_explainer
 
 # Ensure tables exist
 Base.metadata.create_all(bind=engine)
@@ -24,7 +25,7 @@ def predict_rul(payload: TelemetryInput, db: Session = Depends(get_db)):
     """
     row_dict = payload.model_dump()
     engine_id = row_dict.pop("engine_id")
-    
+
     try:
         result = predictor.predict_single_row(row_dict, engine_id=engine_id)
     except Exception as e:
@@ -104,11 +105,6 @@ def replay_engine_history(
     replay_timeline = []
     for step in sampled_steps:
         row_dict = step.model_dump()
-        row_dict["setting_1"] = step.setting_1
-        row_dict["setting_2"] = step.setting_2
-        row_dict["setting_3"] = step.setting_3
-        row_dict["sensor_6"] = step.sensor_6
-        
         try:
             pred = predictor.predict_single_row(row_dict, engine_id=engine_id)
             replay_timeline.append({
@@ -138,3 +134,136 @@ def replay_engine_history(
         "true_rul_at_terminal": detail.true_rul,
         "timeline_steps": replay_timeline
     }
+
+@router.get("/anomalies")
+def get_anomalies(
+    engine_id: Optional[int] = Query(None, description="Optional engine ID filter"),
+    cycle: Optional[int] = Query(None, description="Optional flight cycle filter"),
+    anomaly_only: bool = Query(False, description="Filter only records flagged as anomalous"),
+    limit: int = Query(100, ge=1, le=500),
+    skip: int = Query(0, ge=0)
+):
+    """
+    Fleet-wide unsupervised anomaly detection using trained Isolation Forest.
+    Evaluates multivariate sensor distributions against nominal baseline envelopes.
+    """
+    if engine_service.test_df is None:
+        raise HTTPException(status_code=503, detail="Test dataset not loaded.")
+
+    target_engine = engine_id if isinstance(engine_id, int) else None
+    target_cycle = cycle if isinstance(cycle, int) else None
+    is_anomaly_only = anomaly_only if isinstance(anomaly_only, bool) else False
+    page_limit = limit if isinstance(limit, int) else 100
+    page_skip = skip if isinstance(skip, int) else 0
+
+    df = engine_service.test_df
+    if target_engine is not None:
+        df = df[df["engine_id"] == target_engine]
+        if df.empty:
+            raise HTTPException(status_code=404, detail=f"Engine {target_engine} not found.")
+
+    if target_engine is not None and target_cycle is not None:
+        target_rows = df[df["cycle"] == target_cycle]
+        if target_rows.empty:
+            raise HTTPException(status_code=404, detail=f"Engine {target_engine} cycle {target_cycle} not found.")
+        rows_to_eval = [(target_engine, target_rows.iloc[0].to_dict())]
+    elif target_engine is not None:
+        rows_to_eval = [(target_engine, r.to_dict()) for _, r in df.iterrows()]
+    else:
+        # Fleet-wide: evaluate terminal cycle of each engine
+        grouped = df.groupby("engine_id").last().reset_index()
+        rows_to_eval = [(int(r["engine_id"]), r.to_dict()) for _, r in grouped.iterrows()]
+
+    records = []
+    total_evaluated = 0
+    anomalies_detected = 0
+
+    for eid, row in rows_to_eval:
+        total_evaluated += 1
+        try:
+            pred = predictor.predict_single_row(row, engine_id=eid)
+            is_anom = pred.get("is_anomalous", False)
+            if is_anom:
+                anomalies_detected += 1
+
+            if is_anomaly_only and not is_anom:
+                continue
+
+            records.append({
+                "engine_id": eid,
+                "cycle": int(row["cycle"]),
+                "is_anomalous": is_anom,
+                "anomaly_score": pred.get("anomaly_score"),
+                "predicted_rul": pred.get("predicted_rul_cycles"),
+                "urgency_tier": pred.get("urgency_tier"),
+                "top_sensor_drifts": pred.get("top_sensor_drifts", []),
+                "recommendation": pred.get("recommendation"),
+                "evaluated_at": pred.get("evaluated_at")
+            })
+        except Exception:
+            continue
+
+    paginated = records[page_skip : page_skip + page_limit]
+    return {
+        "status": "success",
+        "total_evaluated": total_evaluated,
+        "anomalies_detected": anomalies_detected,
+        "returned_count": len(paginated),
+        "detector_algorithm": "IsolationForest",
+        "contamination_threshold": 0.05,
+        "items": paginated
+    }
+
+@router.get("/explain/{engine_id}")
+def explain_engine_prediction(
+    engine_id: int,
+    cycle: Optional[int] = Query(None, description="Optional operating cycle to explain")
+):
+    """
+    Computes genuine local TreeSHAP explanations for a given engine observation,
+    quantifying exact positive and negative feature contributions towards predicted RUL.
+    """
+    detail = engine_service.get_engine_detail(engine_id)
+    if not detail:
+        raise HTTPException(status_code=404, detail=f"Engine {engine_id} not found.")
+
+    if not detail.telemetry_history:
+        raise HTTPException(status_code=404, detail=f"No telemetry history for engine {engine_id}.")
+
+    target_cycle = cycle if isinstance(cycle, int) else None
+    if target_cycle is not None:
+        target_pts = [p for p in detail.telemetry_history if p.cycle == target_cycle]
+        if not target_pts:
+            raise HTTPException(status_code=404, detail=f"Cycle {target_cycle} not found for engine {engine_id}.")
+        point = target_pts[0]
+    else:
+        point = detail.telemetry_history[-1]
+
+    row_dict = point.model_dump()
+    try:
+        explanation = shap_explainer.explain_instance(row_dict)
+        return {
+            "engine_id": engine_id,
+            "cycle": point.cycle,
+            "true_rul_at_terminal": detail.true_rul,
+            "explanation": explanation
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Explanation calculation failed: {str(e)}")
+
+@router.post("/explain")
+def explain_custom_telemetry(payload: TelemetryInput):
+    """
+    Computes TreeSHAP feature attributions on arbitrary supplied telemetry.
+    """
+    row_dict = payload.model_dump()
+    engine_id = row_dict.pop("engine_id")
+    try:
+        explanation = shap_explainer.explain_instance(row_dict)
+        return {
+            "engine_id": engine_id,
+            "cycle": row_dict.get("cycle", 0),
+            "explanation": explanation
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Explanation calculation failed: {str(e)}")

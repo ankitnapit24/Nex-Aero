@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { LoaderCircle, Play } from 'lucide-react';
+import { LoaderCircle, Play, Sparkles } from 'lucide-react';
 import {
   CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ResponsiveContainer,
 } from 'recharts';
@@ -24,6 +24,9 @@ export default function Predictions() {
   const [metadataError, setMetadataError] = useState('');
   const [history, setHistory] = useState([]);
   const [result, setResult] = useState(null);
+  const [explanation, setExplanation] = useState(null);
+  const [explanationError, setExplanationError] = useState('');
+  const [explaining, setExplaining] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -66,6 +69,8 @@ export default function Predictions() {
     setLoading(true);
     setDetail(null);
     setResult(null);
+    setExplanation(null);
+    setExplanationError('');
     api.getEngine(Number(engineId))
       .then((data) => { if (active) { setDetail(data); setError(''); } })
       .catch((requestError) => { if (active) setError(getApiErrorMessage(requestError)); })
@@ -111,6 +116,24 @@ export default function Predictions() {
       setHistoryError('');
     } catch (historyRequestError) {
       setHistoryError(getApiErrorMessage(historyRequestError));
+    }
+  };
+
+  const explainCurrentTelemetry = async () => {
+    if (!detail?.engine_id || !latest?.cycle) {
+      setExplanationError(t('Select an engine with available telemetry before requesting an explanation.'));
+      return;
+    }
+    setExplaining(true);
+    setExplanationError('');
+    try {
+      const response = await api.getExplain(detail.engine_id, latest.cycle);
+      setExplanation(response.explanation);
+    } catch (requestError) {
+      setExplanation(null);
+      setExplanationError(getApiErrorMessage(requestError, t('Feature explanation could not be calculated.')));
+    } finally {
+      setExplaining(false);
     }
   };
 
@@ -169,6 +192,48 @@ export default function Predictions() {
               )}
             </Panel>
           </div>
+
+          <Panel>
+            <PanelHeading
+              title="Prediction explanation"
+              description="Inspect local TreeSHAP feature contributions for the selected engine’s latest observed telemetry."
+              action={(
+                <button className="button button-outline" type="button" onClick={explainCurrentTelemetry} disabled={!detail || !latest || explaining}>
+                  {explaining ? <LoaderCircle size={15} className="spin" /> : <Sparkles size={15} />}
+                  {explaining ? t('Calculating explanation…') : t('Explain current prediction')}
+                </button>
+              )}
+            />
+            {explanationError ? <StateBlock error={explanationError} /> : !explanation ? (
+              <StateBlock empty="Request an explanation to inspect which model features influenced the estimate." />
+            ) : (
+              <div className="explanation-content">
+                <div className="explanation-summary">
+                  <span>{t('Explanation method')} <strong>{explanation.method}</strong></span>
+                  <span>{t('Baseline estimate')} <strong>{formatRul(explanation.base_expected_value)}</strong></span>
+                  <span>{t('Explained estimate')} <strong>{formatRul(explanation.predicted_rul)}</strong></span>
+                </div>
+                <div className="explanation-list">
+                  {explanation.contributions.slice(0, 5).map((contribution) => {
+                    const impact = Number(contribution.shap_value);
+                    return (
+                      <div className="explanation-row" key={contribution.feature}>
+                        <div className="explanation-feature">
+                          <strong>{contribution.description || contribution.feature}</strong>
+                          <small>{contribution.feature} · {t('Observed value')} {contribution.value}</small>
+                        </div>
+                        <span className={`explanation-impact ${impact < 0 ? 'impact-negative' : 'impact-positive'}`}>
+                          {impact > 0 ? '+' : ''}{impact.toFixed(2)} {t('cycles')}
+                        </span>
+                        <span className="explanation-direction">{t(contribution.direction)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="chart-note">{t('SHAP values explain model behavior for this observation; they are not causal findings or maintenance instructions.')}</p>
+              </div>
+            )}
+          </Panel>
 
           <Panel>
             <PanelHeading title="Model evaluation" description="Reported dataset metrics · separate from individual inference results." />

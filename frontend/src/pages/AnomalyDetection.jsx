@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Activity, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Activity, AlertTriangle, Search } from 'lucide-react';
 import {
   CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
@@ -21,6 +22,11 @@ export default function AnomalyDetection() {
   const [detectorLoaded, setDetectorLoaded] = useState(false);
   const [metadataError, setMetadataError] = useState('');
   const [reloadToken, setReloadToken] = useState(0);
+  const [fleetAnomalies, setFleetAnomalies] = useState(null);
+  const [loadingAnomalies, setLoadingAnomalies] = useState(true);
+  const [anomalyError, setAnomalyError] = useState('');
+  const [anomalyOnly, setAnomalyOnly] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   const loadFleet = async () => {
     setLoadingFleet(true);
@@ -49,6 +55,21 @@ export default function AnomalyDetection() {
 
   useEffect(() => { loadFleet(); }, []);
 
+  const loadAnomalies = async () => {
+    setLoadingAnomalies(true);
+    setAnomalyError('');
+    try {
+      setFleetAnomalies(await api.getAnomalies({ anomaly_only: anomalyOnly, limit: 100 }));
+    } catch (requestError) {
+      setFleetAnomalies(null);
+      setAnomalyError(getApiErrorMessage(requestError, 'Fleet anomaly results could not be loaded.'));
+    } finally {
+      setLoadingAnomalies(false);
+    }
+  };
+
+  useEffect(() => { loadAnomalies(); }, [anomalyOnly]);
+
   const loadReplay = async () => {
     if (!engineId) return;
     setLoadingReplay(true);
@@ -76,6 +97,11 @@ export default function AnomalyDetection() {
   const mostAnomalous = detectorLoaded && steps.length
     ? steps.reduce((lowest, step) => Number(step.anomaly_score) < Number(lowest.anomaly_score) ? step : lowest)
     : null;
+  const visibleAnomalies = (fleetAnomalies?.items || []).filter((item) => (
+    !searchTerm
+    || String(item.engine_id).includes(searchTerm.trim())
+    || formatEngine(item.engine_id).toLowerCase().includes(searchTerm.trim().toLowerCase())
+  ));
 
   return (
     <div className="page-stack">
@@ -110,6 +136,40 @@ export default function AnomalyDetection() {
         onLoad={() => setReloadToken((token) => token + 1)}
         detectorLoaded={detectorLoaded}
       />
+
+      <Panel>
+        <PanelHeading
+          title="Fleet anomaly surveillance"
+          description="Terminal-cycle Isolation Forest classifications and sensor-drift results returned by the backend."
+          action={<button className="button button-outline" type="button" onClick={loadAnomalies} disabled={loadingAnomalies}>{loadingAnomalies ? t('Loading…') : t('Refresh fleet results')}</button>}
+        />
+        <div className="anomaly-fleet-controls">
+          <label className="search-field"><Search size={15} aria-hidden="true" /><span className="sr-only">{t('Search engine number')}</span><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('Find engine by number')} /></label>
+          <label className="anomaly-filter-toggle"><input type="checkbox" checked={anomalyOnly} onChange={(event) => setAnomalyOnly(event.target.checked)} disabled={!detectorLoaded} /><span>{t('Show anomalies only')}</span></label>
+          {fleetAnomalies && <span className="filter-count">{fleetAnomalies.anomalies_detected} / {fleetAnomalies.total_evaluated} {t('flagged')}</span>}
+        </div>
+        {anomalyError || loadingAnomalies || visibleAnomalies.length === 0 ? (
+          <StateBlock loading={loadingAnomalies} error={anomalyError} empty={!loadingAnomalies && !anomalyError ? 'No fleet observations match the current filters.' : ''} onRetry={loadAnomalies} />
+        ) : (
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>{t('Engine')}</th><th>{t('Cycle')}</th><th>{t('Anomaly status')}</th><th>{t('Decision score')}</th><th>{t('Largest sensor drifts')}</th><th>{t('Estimated RUL')}</th></tr></thead>
+              <tbody>
+                {visibleAnomalies.map((item) => (
+                  <tr key={item.engine_id}>
+                    <td><Link className="table-primary-link" to={`/engines/${item.engine_id}`}>{formatEngine(item.engine_id)}</Link></td>
+                    <td className="numeric">{item.cycle}</td>
+                    <td>{detectorLoaded ? t(item.is_anomalous ? 'Flagged' : 'Not flagged') : t('Unavailable')}</td>
+                    <td className="numeric">{detectorLoaded && item.anomaly_score !== null && Number.isFinite(Number(item.anomaly_score)) ? Number(item.anomaly_score).toFixed(3) : '—'}</td>
+                    <td className="drift-summary">{(item.top_sensor_drifts || []).slice(0, 2).map((drift) => `${drift.feature} ${Number(drift.delta) > 0 ? '+' : ''}${drift.delta} (${Number(drift.abs_z).toFixed(1)}σ)`).join(' · ') || t('No sensor drift detected')}</td>
+                    <td className="numeric">{item.predicted_rul === null || item.predicted_rul === undefined ? '—' : `${Number(item.predicted_rul).toFixed(1)} ${t('cycles')}`}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Panel>
 
       {detectorLoaded && (
         <div className="content-grid anomaly-grid">
