@@ -1,454 +1,214 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Cpu, Send, RefreshCw, CheckCircle, Clock, AlertTriangle, ArrowRight, ShieldCheck, BarChart } from 'lucide-react';
-import api from '../services/api';
-import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
-import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
+import { LoaderCircle, Play } from 'lucide-react';
+import {
+  CartesianGrid, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ResponsiveContainer,
+} from 'recharts';
+import api, { getApiErrorMessage } from '../services/api';
+import { Disclaimer, formatEngine, formatRul, formatTimestamp, PageHeading, Panel, PanelHeading, RiskBadge, StateBlock } from '../components/UI/Shared';
+import { usePreferences } from '../i18n/Preferences';
+
+const requiredTelemetry = [
+  'cycle', 'setting_1', 'setting_2', 'setting_3', 'sensor_2', 'sensor_3', 'sensor_4',
+  'sensor_6', 'sensor_7', 'sensor_8', 'sensor_9', 'sensor_11', 'sensor_12',
+  'sensor_13', 'sensor_14', 'sensor_15', 'sensor_17', 'sensor_20', 'sensor_21',
+];
 
 export default function Predictions() {
+  const { t } = usePreferences();
   const location = useLocation();
-  const initialEngineId = location.state?.engineId || 34;
-
-  const [engineId, setEngineId] = useState(initialEngineId);
-  const [loadingDefaults, setLoadingDefaults] = useState(false);
+  const [engines, setEngines] = useState([]);
+  const [engineId, setEngineId] = useState('');
+  const [detail, setDetail] = useState(null);
+  const [metadata, setMetadata] = useState(null);
+  const [metadataError, setMetadataError] = useState('');
+  const [history, setHistory] = useState([]);
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [predictionResult, setPredictionResult] = useState(null);
-  const [predictionHistory, setPredictionHistory] = useState([]);
-  const [error, setError] = useState(null);
-
-  // Form state
-  const [formData, setFormData] = useState({
-    cycle: 150,
-    setting_1: -0.0007,
-    setting_2: -0.0004,
-    setting_3: 100.0,
-    sensor_2: 642.5,
-    sensor_3: 1585.0,
-    sensor_4: 1400.0,
-    sensor_6: 21.61,
-    sensor_7: 554.0,
-    sensor_8: 2388.05,
-    sensor_9: 9050.0,
-    sensor_11: 47.3,
-    sensor_12: 521.8,
-    sensor_13: 2388.08,
-    sensor_14: 8130.0,
-    sensor_15: 8.42,
-    sensor_17: 392.0,
-    sensor_20: 39.0,
-    sensor_21: 23.4,
-  });
+  const [error, setError] = useState('');
+  const [historyError, setHistoryError] = useState('');
+  const [loadVersion, setLoadVersion] = useState(0);
 
   useEffect(() => {
-    loadEngineTelemetry(engineId);
-    fetchHistory();
+    let active = true;
+    Promise.allSettled([api.getEngines(), api.getModelMetadata(), api.getPredictions(100)])
+      .then(([fleetResult, modelResult, historyResult]) => {
+        if (!active) return;
+        if (fleetResult.status === 'rejected') setError(getApiErrorMessage(fleetResult.reason));
+        else {
+          setEngines(fleetResult.value);
+          const preferred = Number(location.state?.engineId);
+          const initial = fleetResult.value.some((engine) => engine.engine_id === preferred)
+            ? preferred
+            : fleetResult.value[0]?.engine_id;
+          if (initial !== undefined) setEngineId(String(initial));
+        }
+        if (modelResult.status === 'fulfilled') {
+          setMetadata(modelResult.value);
+          setMetadataError('');
+        } else {
+          setMetadataError(getApiErrorMessage(modelResult.reason));
+        }
+        if (historyResult.status === 'fulfilled') setHistory(historyResult.value);
+        else setHistoryError(getApiErrorMessage(historyResult.reason));
+        setLoading(false);
+      });
+    return () => { active = false; };
+  }, [location.state, loadVersion]);
+
+  useEffect(() => {
+    if (!engineId) {
+      setDetail(null);
+      return;
+    }
+    let active = true;
+    setLoading(true);
+    setDetail(null);
+    setResult(null);
+    api.getEngine(Number(engineId))
+      .then((data) => { if (active) { setDetail(data); setError(''); } })
+      .catch((requestError) => { if (active) setError(getApiErrorMessage(requestError)); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
   }, [engineId]);
 
-  const fetchHistory = async () => {
-    try {
-      const data = await api.getPredictions(10);
-      setPredictionHistory(data);
-    } catch (e) {
-      console.error('Failed to load history', e);
+  const latest = detail?.telemetry_history?.at(-1);
+  const evaluationPoints = useMemo(() => engines
+    .filter((engine) => Number.isFinite(Number(engine.true_rul)) && Number.isFinite(Number(engine.predicted_rul)))
+    .map((engine) => ({ actual: Number(engine.true_rul), predicted: Number(engine.predicted_rul), engine_id: engine.engine_id })), [engines]);
+  const evaluation = metadata?.nasa_test_metrics;
+  const validation = metadata?.cv_validation_metrics;
+
+  const runPrediction = async () => {
+    if (!detail || !latest || !Number.isInteger(Number(engineId))) {
+      setError('Select an engine with available telemetry before requesting a prediction.');
+      return;
     }
-  };
-
-  const loadEngineTelemetry = async (eid) => {
-    try {
-      setLoadingDefaults(true);
-      setError(null);
-      const detail = await api.getEngine(eid);
-      if (detail && detail.telemetry_history.length > 0) {
-        const last = detail.telemetry_history[detail.telemetry_history.length - 1];
-        setFormData({
-          cycle: last.cycle,
-          setting_1: last.setting_1,
-          setting_2: last.setting_2,
-          setting_3: last.setting_3,
-          sensor_2: last.sensor_2,
-          sensor_3: last.sensor_3,
-          sensor_4: last.sensor_4,
-          sensor_6: 21.61,
-          sensor_7: last.sensor_7,
-          sensor_8: last.sensor_8,
-          sensor_9: last.sensor_9,
-          sensor_11: last.sensor_11,
-          sensor_12: last.sensor_12,
-          sensor_13: last.sensor_13,
-          sensor_14: last.sensor_14,
-          sensor_15: last.sensor_15,
-          sensor_17: last.sensor_17,
-          sensor_20: last.sensor_20,
-          sensor_21: last.sensor_21,
-        });
-      }
-    } catch (err) {
-      setError(`Could not pull telemetry for ENG-${eid}`);
-    } finally {
-      setLoadingDefaults(false);
+    const missing = requiredTelemetry.filter((key) => !Number.isFinite(Number(latest[key])));
+    if (missing.length) {
+      setError(`The selected engine telemetry is missing required fields: ${missing.join(', ')}.`);
+      return;
     }
-  };
-
-  const handleInputChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      [field]: parseFloat(value) || 0,
-    }));
-  };
-
-  const handleRunInference = async (e) => {
-    e.preventDefault();
+    setSubmitting(true);
+    setError('');
+    let predictionSucceeded = false;
     try {
-      setSubmitting(true);
-      setError(null);
-      const payload = {
-        engine_id: parseInt(engineId, 10),
-        ...formData,
-      };
-      const res = await api.predictRul(payload);
-      setPredictionResult(res);
-      fetchHistory();
-    } catch (err) {
-      setError(err.response?.data?.detail || 'Inference execution failed.');
+      const response = await api.predictRul({
+        engine_id: Number(engineId),
+        ...Object.fromEntries(requiredTelemetry.map((key) => [key, Number(latest[key])])),
+      });
+      setResult(response);
+      predictionSucceeded = true;
+    } catch (requestError) {
+      setError(getApiErrorMessage(requestError, 'Inference request failed.'));
     } finally {
       setSubmitting(false);
+    }
+    if (!predictionSucceeded) return;
+    try {
+      setHistory(await api.getPredictions(100));
+      setHistoryError('');
+    } catch (historyRequestError) {
+      setHistoryError(getApiErrorMessage(historyRequestError));
     }
   };
 
   return (
-    <div className="space-y-5">
-      <DisclaimerBanner />
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
-            Remaining Useful Life Prediction
-          </h1>
-          <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
-            Technical inference workspace &bull; Random Forest model with Isolation Forest anomaly verification
-          </p>
-        </div>
-
-        {/* Engine Loader */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-[#656D76] dark:text-[#9198A1]">Load Engine State:</label>
-          <select
-            value={engineId}
-            onChange={(e) => setEngineId(e.target.value)}
-            className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] text-[#1F2328] dark:text-[#E6EDF3] text-xs rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#0969DA]"
-          >
-            {Array.from({ length: 100 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                ENG-{String(n).padStart(3, '0')}
-              </option>
-            ))}
-          </select>
-          <button
-            onClick={() => loadEngineTelemetry(engineId)}
-            className="p-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
-            title="Reload engine state"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loadingDefaults ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-        {/* Telemetry Input Form (2 cols) */}
-        <div className="lg:col-span-2 bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-4">
-          <form onSubmit={handleRunInference} className="space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-[#D1D9E0] dark:border-[#30363D]">
-              <span className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                Telemetry Inputs (ENG-{String(engineId).padStart(3, '0')})
-              </span>
-              <span className="text-[11px] font-mono text-[#848D97]">19 schema features</span>
-            </div>
-
-            {/* Operating Condition Settings */}
-            <div className="space-y-1.5">
-              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
-                Operational Flight Settings
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">Flight Cycle</label>
-                  <input
-                    type="number"
-                    value={formData.cycle}
-                    onChange={(e) => handleInputChange('cycle', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
+    <div className="page-stack">
+      <PageHeading eyebrow="MODEL INFERENCE" title="RUL predictions" description="Review model estimates, prediction history, and evaluation results." />
+      <Disclaimer />
+      {loading && engines.length === 0 ? <StateBlock loading /> : error && engines.length === 0 ? <StateBlock error={error} onRetry={() => { setError(''); setLoading(true); setLoadVersion((version) => version + 1); }} /> : (
+        <>
+          <div className="content-grid prediction-grid">
+            <Panel>
+              <PanelHeading title="Request an estimate" description="Inference uses the selected engine’s latest observed dataset row." />
+              <div className="prediction-form">
+                <label className="field-label" htmlFor="prediction-engine">{t('Engine')}</label>
+                <select id="prediction-engine" className="form-select" value={engineId} onChange={(event) => setEngineId(event.target.value)}>
+                  {engines.map((engine) => <option key={engine.engine_id} value={engine.engine_id}>{formatEngine(engine.engine_id)} · {t('cycle')} {engine.last_cycle}</option>)}
+                </select>
+                <div className="telemetry-preview">
+                  <span>{t('Telemetry source')}</span>
+                  <strong>{latest ? `NASA C-MAPSS · ${t('Cycle')} ${latest.cycle}` : t('Loading selected engine…')}</strong>
+                  <small>{latest ? `${requiredTelemetry.length} ${t('required model inputs from the latest observed row')}` : t('No fabricated input values are used.')}</small>
                 </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">Setting 1 (Altitude)</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={formData.setting_1}
-                    onChange={(e) => handleInputChange('setting_1', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">Setting 2 (Mach)</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={formData.setting_2}
-                    onChange={(e) => handleInputChange('setting_2', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">Setting 3 (TRA)</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    value={formData.setting_3}
-                    onChange={(e) => handleInputChange('setting_3', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
+                <button className="button button-dark prediction-submit" type="button" onClick={runPrediction} disabled={!detail || !latest || submitting}>
+                  {submitting ? <LoaderCircle size={16} className="spin" /> : <Play size={15} fill="currentColor" />}
+                  {submitting ? t('Running model…') : t('Run prediction')}
+                </button>
+                {error && <p className="field-error" role="alert">{error}</p>}
               </div>
-            </div>
-
-            {/* Temperatures */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
-                Gas Path Temperatures (°R)
-              </span>
-              <div className="grid grid-cols-3 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s2 (LPC Outlet Temp)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_2}
-                    onChange={(e) => handleInputChange('sensor_2', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s3 (HPC Outlet Temp)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_3}
-                    onChange={(e) => handleInputChange('sensor_3', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s4 (LPT Outlet Temp)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_4}
-                    onChange={(e) => handleInputChange('sensor_4', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Pressures */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
-                Compressor Pressures (psia)
-              </span>
-              <div className="grid grid-cols-2 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s7 (Total HPC Pressure)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_7}
-                    onChange={(e) => handleInputChange('sensor_7', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s11 (Static HPC Pressure)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_11}
-                    onChange={(e) => handleInputChange('sensor_11', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Speeds & Dynamics */}
-            <div className="space-y-1.5 pt-1">
-              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
-                Rotor Speeds & Fluid Ratios
-              </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s8 (Fan Speed, rpm)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_8}
-                    onChange={(e) => handleInputChange('sensor_8', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s9 (Core Speed, rpm)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_9}
-                    onChange={(e) => handleInputChange('sensor_9', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s12 (Fuel Flow Ratio)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.sensor_12}
-                    onChange={(e) => handleInputChange('sensor_12', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] text-[#848D97] block">s15 (Bypass Ratio)</label>
-                  <input
-                    type="number"
-                    step="0.0001"
-                    value={formData.sensor_15}
-                    onChange={(e) => handleInputChange('sensor_15', e.target.value)}
-                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {error && (
-              <div className="p-2.5 border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30 rounded text-xs">
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full py-2 px-3 rounded-md bg-[#0969DA] text-white text-xs font-medium hover:bg-[#0856b3] disabled:opacity-50 transition-colors"
-            >
-              {submitting ? 'Executing Inference Pipeline...' : 'Run Real-Time ML Inference'}
-            </button>
-          </form>
-        </div>
-
-        {/* Prediction Results Panel (1 col) */}
-        <div className="space-y-4">
-          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-4">
-            <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3] pb-2 border-b border-[#D1D9E0] dark:border-[#30363D]">
-              Model Output Result
-            </h3>
-
-            {predictionResult ? (
-              <div className="space-y-3.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#656D76] dark:text-[#9198A1]">Engine / Cycle:</span>
-                  <span className="font-mono font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                    ENG-{String(predictionResult.engine_id).padStart(3, '0')} (c{predictionResult.cycle})
-                  </span>
-                </div>
-
-                {/* Main RUL Display */}
-                <div className="p-3.5 bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md text-center">
-                  <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-                    Estimated Remaining Useful Life
-                  </span>
-                  <div className="mt-1 text-3xl font-bold font-mono tabular-nums text-[#1F2328] dark:text-[#E6EDF3]">
-                    {predictionResult.predicted_rul_cycles}{' '}
-                    <span className="text-xs font-normal text-[#848D97]">cycles</span>
+              {detail && <div className="prediction-current"><span>{t('Existing fleet estimate')}</span><strong>{formatRul(detail.predicted_rul)}</strong><small>{t('Displayed separately from any new inference request.')}</small></div>}
+            </Panel>
+            <Panel className="prediction-result-panel">
+              <PanelHeading title="Prediction result" description="Returned directly by the backend model." />
+              {!result ? <StateBlock empty="Run a prediction to see a new model response here." /> : (
+                <div className="result-content">
+                  <div className="result-topline"><span>{formatEngine(result.engine_id)} · {t('Cycle')} {result.cycle}</span><RiskBadge tier={result.urgency_tier} /></div>
+                  <strong className="result-rul">{formatRul(result.predicted_rul_cycles)}</strong>
+                  <span className="result-label">{t('Estimated remaining useful life')}</span>
+                  <div className="result-facts">
+                    <span>{t('Model version')} <b>{result.model_version || '—'}</b></span>
+                    <span>{t('Evaluated at')} <b>{formatTimestamp(result.evaluated_at)}</b></span>
+                    <span>{t('Anomaly status')} <b>{metadata?.anomaly_detector_loaded === true ? t(result.is_anomalous ? 'Flagged' : 'Not flagged') : t('Detector unavailable')}</b></span>
+                    <span>{t('Decision score')} <b>{metadata?.anomaly_detector_loaded === true && Number.isFinite(Number(result.anomaly_score)) ? Number(result.anomaly_score).toFixed(3) : '—'}</b></span>
                   </div>
-                  <div className="mt-2.5 flex items-center justify-center gap-2">
-                    <EngineStatusBadge tier={predictionResult.urgency_tier} size="md" />
-                    {predictionResult.is_anomalous ? (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30">
-                        Anomaly ({predictionResult.anomaly_score})
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono border border-[#1A7F37]/40 text-[#1A7F37] bg-[#DAFBE1] dark:bg-[#043310]/30">
-                        Nominal ({predictionResult.anomaly_score})
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Sensor Drift Attribution */}
-                {predictionResult.top_sensor_drifts?.length > 0 && (
-                  <div className="border border-[#D1D9E0] dark:border-[#30363D] rounded-md p-2.5 space-y-1.5 bg-[#F6F8FA] dark:bg-[#0D1117]">
-                    <span className="text-[10px] font-semibold text-[#656D76] dark:text-[#9198A1] uppercase font-mono block">
-                      Sensor Drift Drivers (vs Baseline)
-                    </span>
-                    <div className="space-y-1 font-mono text-[11px]">
-                      {predictionResult.top_sensor_drifts.map((d) => (
-                        <div key={d.feature} className="flex justify-between items-center text-xs">
-                          <span className="text-[#1F2328] dark:text-[#E6EDF3] font-sans text-[11px]">
-                            {d.description}
-                          </span>
-                          <span className={d.z_score > 1.5 ? 'text-[#CF222E]' : d.z_score < -1.5 ? 'text-[#0969DA]' : 'text-[#656D76]'}>
-                            {d.z_score > 0 ? `+${d.z_score}` : d.z_score}σ
-                          </span>
-                        </div>
-                      ))}
+                  {metadata?.anomaly_detector_loaded !== true && <p className="chart-note">{t('The Isolation Forest artifact is not loaded by the backend. No anomaly classification is inferred from its fallback response.')}</p>}
+                  {Array.isArray(result.top_sensor_drifts) && result.top_sensor_drifts.length > 0 && (
+                    <div className="prediction-drifts">
+                      <strong>{t('Largest baseline sensor drifts')}</strong>
+                      <div className="table-scroll"><table className="data-table"><thead><tr><th>{t('Sensor')}</th><th>{t('Current')}</th><th>{t('Baseline')}</th><th>{t('Delta')}</th><th>{t('Z-score')}</th></tr></thead><tbody>
+                        {result.top_sensor_drifts.map((drift) => <tr key={drift.feature}><td>{drift.description || drift.feature}<span className="table-subtext">{drift.feature} · {drift.trend}</span></td><td className="numeric">{drift.current_value}</td><td className="numeric">{drift.baseline_mean}</td><td className="numeric">{drift.delta}</td><td className="numeric rul-value">{Number(drift.z_score).toFixed(2)}σ</td></tr>)}
+                      </tbody></table></div>
                     </div>
-                  </div>
-                )}
-
-                {/* Recommended Protocol */}
-                <div className="text-xs text-[#656D76] dark:text-[#9198A1] border-t border-[#D1D9E0] dark:border-[#30363D] pt-2.5 space-y-1">
-                  <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3] block">
-                    Maintenance Recommendation:
-                  </span>
-                  <p className="text-[11px] leading-relaxed">
-                    {predictionResult.recommendation}
-                  </p>
+                  )}
+                  {result.recommendation && <div className="advisory-copy"><strong>{t('Model advisory')}</strong><p>{result.recommendation}</p><small>{t('Experimental model output only; it is not an approved maintenance instruction.')}</small></div>}
+                  {result.disclaimer && <p className="chart-note">{result.disclaimer}</p>}
                 </div>
-              </div>
-            ) : (
-              <div className="p-8 text-center text-xs text-[#848D97]">
-                Submit telemetry parameters to run live model inference.
+              )}
+            </Panel>
+          </div>
+
+          <Panel>
+            <PanelHeading title="Model evaluation" description="Reported dataset metrics · separate from individual inference results." />
+            {!evaluation && !validation ? <StateBlock error={metadataError} empty={!metadataError ? 'Evaluation not available from the backend.' : ''} /> : (
+              <div className="evaluation-layout">
+                <div className="evaluation-groups">
+                  {validation && <div className="evaluation-group"><span className="eyebrow">{t('5-FOLD GROUP VALIDATION')}</span><div className="benchmark-stats"><div><span>{t('Mean MAE')}</span><strong>{validation.mean_mae_cycles ?? '—'} <small>{t('cycles')}</small></strong></div><div><span>{t('Mean RMSE')}</span><strong>{validation.mean_rmse_cycles ?? '—'} <small>{t('cycles')}</small></strong></div><div><span>{t('Mean R²')}</span><strong>{validation.mean_r2 ?? '—'}</strong></div></div></div>}
+                  {evaluation && <div className="evaluation-group"><span className="eyebrow">{t('NASA TEST SET')}</span><div className="benchmark-stats"><div><span>{t('Test engines')}</span><strong>{evaluation.test_engines ?? '—'}</strong></div><div><span>{t('Test MAE')}</span><strong>{evaluation.test_mae_cycles ?? '—'} <small>{t('cycles')}</small></strong></div><div><span>{t('Test RMSE')}</span><strong>{evaluation.test_rmse_cycles ?? '—'} <small>{t('cycles')}</small></strong></div></div></div>}
+                </div>
+                <div className="evaluation-chart">
+                  <span className="field-label">{t('Test-set actual vs predicted RUL')}</span>
+                  {evaluationPoints.length === 0 ? <StateBlock empty="Engine-level reference values are not available for this chart." /> : (
+                    <div className="chart-wrap chart-scatter">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ScatterChart margin={{ top: 10, right: 12, bottom: 8, left: 0 }}>
+                          <CartesianGrid stroke="#e8e4dc" strokeDasharray="3 5" />
+                          <XAxis type="number" dataKey="actual" name={t('Actual RUL')} tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 10 }} label={{ value: t('Reference RUL (cycles)'), position: 'insideBottom', offset: -2, fill: '#77746d', fontSize: 10 }} />
+                          <YAxis type="number" dataKey="predicted" name={t('Predicted RUL')} tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 10 }} width={45} />
+                          <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ background: '#fbfaf7', border: '1px solid #d4d1ca', borderRadius: 8, fontSize: 12 }} formatter={(value) => [`${Number(value).toFixed(1)} ${t('cycles')}`]} labelFormatter={(_, payload) => payload?.[0]?.payload ? formatEngine(payload[0].payload.engine_id) : ''} />
+                          <Scatter data={evaluationPoints} fill="#c66f5e" fillOpacity={0.72} />
+                        </ScatterChart>
+                      </ResponsiveContainer>
+                    </div>
+                  )}
+                  <p className="chart-note">{t('Dots use per-engine values returned by the test-fleet endpoint. Aggregate metrics are reported separately.')}</p>
+                </div>
               </div>
             )}
-          </div>
+          </Panel>
 
-          {/* SQLite Audit Trail */}
-          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5 space-y-2.5">
-            <h4 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-              Audit Log (Recent Predictions)
-            </h4>
-            <div className="space-y-1.5 font-mono text-xs">
-              {predictionHistory.slice(0, 4).map((rec) => (
-                <div
-                  key={rec.id}
-                  className="p-2 rounded border border-[#EAEEF2] dark:border-[#21262D] bg-[#F6F8FA] dark:bg-[#0D1117] flex justify-between items-center"
-                >
-                  <div>
-                    <span className="font-semibold text-[#0969DA] dark:text-[#4493F8]">
-                      ENG-{String(rec.engine_id).padStart(3, '0')}
-                    </span>{' '}
-                    <span className="text-[#848D97]">(c{rec.cycle})</span>
-                  </div>
-                  <div className="text-right">
-                    <span className="font-bold text-[#1F2328] dark:text-[#E6EDF3]">{rec.predicted_rul}c</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
+          <Panel>
+            <PanelHeading title="Recent inference records" description="Persisted audit records returned by the backend." />
+            {historyError ? <StateBlock error={historyError} /> : history.length === 0 ? <StateBlock empty="No predictions are stored yet. Run an inference to create the first record." /> : (
+              <div className="table-scroll"><table className="data-table">              <thead><tr><th>{t('Recorded at')}</th><th>{t('Engine')}</th><th>{t('Cycle')}</th><th>{t('Estimate')}</th><th>{t('Tier')}</th><th>{t('Model')}</th></tr></thead><tbody>
+                {history.slice(0, 6).map((record) => <tr key={record.id}><td>{formatTimestamp(record.created_at)}</td><td>{formatEngine(record.engine_id)}</td><td className="numeric">{record.cycle}</td><td className="numeric rul-value">{formatRul(record.predicted_rul)}</td><td><RiskBadge tier={record.urgency_tier} /></td><td>{record.model_version}</td></tr>)}
+              </tbody></table></div>
+            )}
+          </Panel>
+        </>
+      )}
     </div>
   );
 }

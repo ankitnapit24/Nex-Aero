@@ -18,6 +18,7 @@ class EngineTelemetryPoint(BaseModel):
     sensor_2: float
     sensor_3: float
     sensor_4: float
+    sensor_6: float
     sensor_7: float
     sensor_8: float
     sensor_9: float

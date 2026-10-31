@@ -73,7 +73,10 @@ def get_model_metadata():
     """
     Returns the loaded model metadata, training metrics, and anomaly detector parameters.
     """
-    return predictor.metadata
+    return {
+        **predictor.metadata,
+        "anomaly_detector_loaded": predictor.anomaly_model is not None,
+    }
 
 @router.post("/demo/replay", response_model=Dict[str, Any])
 def replay_engine_history(
@@ -104,7 +107,7 @@ def replay_engine_history(
         row_dict["setting_1"] = step.setting_1
         row_dict["setting_2"] = step.setting_2
         row_dict["setting_3"] = step.setting_3
-        row_dict["sensor_6"] = 21.61  # constant
+        row_dict["sensor_6"] = step.sensor_6
         
         try:
             pred = predictor.predict_single_row(row_dict, engine_id=engine_id)

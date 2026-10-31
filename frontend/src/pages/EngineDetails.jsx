@@ -1,448 +1,178 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, ChevronDown } from 'lucide-react';
 import {
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Tooltip,
-  CartesianGrid,
-  Legend,
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts';
-import {
-  ArrowLeft,
-  Cpu,
-  Activity,
-  Play,
-  Pause,
-  RotateCcw,
-  FastForward,
-  AlertOctagon,
-  Clock,
-  Layers,
-} from 'lucide-react';
-import api from '../services/api';
-import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
-import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
+import api, { getApiErrorMessage } from '../services/api';
+import HistoricalReplay from '../components/Charts/HistoricalReplay';
+import { Disclaimer, formatEngine, formatRul, formatTimestamp, PageHeading, Panel, PanelHeading, RiskBadge, StateBlock } from '../components/UI/Shared';
+import { usePreferences } from '../i18n/Preferences';
+
+const sensorLabel = (sensor) => sensor.replace('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 
 export default function EngineDetails() {
+  const { t } = usePreferences();
   const { id } = useParams();
   const navigate = useNavigate();
-  const [engineId, setEngineId] = useState(id || '34');
-  const [engineDetail, setEngineDetail] = useState(null);
+  const [engines, setEngines] = useState([]);
+  const [detail, setDetail] = useState(null);
+  const [records, setRecords] = useState([]);
+  const [metadata, setMetadata] = useState(null);
+  const [metadataError, setMetadataError] = useState('');
+  const [sensor, setSensor] = useState('sensor_2');
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [activeSensorGroup, setActiveSensorGroup] = useState('temp');
+  const [error, setError] = useState('');
+  const [historyError, setHistoryError] = useState('');
+  const [replay, setReplay] = useState(null);
+  const [replayLoading, setReplayLoading] = useState(false);
+  const [replayError, setReplayError] = useState('');
 
-  // Replay State
-  const [replayData, setReplayData] = useState(null);
-  const [replayIndex, setReplayIndex] = useState(0);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1);
-  const timerRef = useRef(null);
-
-  useEffect(() => {
-    if (id) {
-      setEngineId(id);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    fetchEngineDetail(engineId);
-    loadReplayData(engineId);
-    setIsPlaying(false);
-  }, [engineId]);
-
-  const fetchEngineDetail = async (eid) => {
+  const loadEngine = async () => {
+    setLoading(true);
+    setError('');
+    setHistoryError('');
+    setMetadataError('');
+    setReplay(null);
+    setReplayError('');
     try {
-      setLoading(true);
-      setError(null);
-      const data = await api.getEngine(eid);
-      setEngineDetail(data);
-    } catch (err) {
-      setError(`Unable to load telemetry for Engine ENG-${eid}.`);
+      const fleet = await api.getEngines();
+      setEngines(fleet);
+      if (!fleet.length) {
+        setDetail(null);
+        setError('The backend returned no engines for the selected dataset.');
+        return;
+      }
+      const engineId = id ? Number(id) : fleet[0].engine_id;
+      if (!Number.isInteger(engineId) || engineId < 1) {
+        setDetail(null);
+        setError('Engine identifier must be a positive whole number.');
+        return;
+      }
+      if (!id) navigate(`/engines/${engineId}`, { replace: true });
+      const [engineResult, historyResult, modelResult] = await Promise.allSettled([
+        api.getEngine(engineId),
+        api.getPredictions(1000),
+        api.getModelMetadata(),
+      ]);
+      if (engineResult.status === 'rejected') throw engineResult.reason;
+      setDetail(engineResult.value);
+      setSensor((current) => current === 'sensor_2' || engineResult.value.telemetry_history?.[0]?.[current] !== undefined
+        ? current
+        : Object.keys(engineResult.value.telemetry_history?.[0] || {}).find((key) => key.startsWith('sensor_')) || 'sensor_2');
+      if (historyResult.status === 'fulfilled') setRecords(historyResult.value.filter((record) => record.engine_id === engineId));
+      else setHistoryError(getApiErrorMessage(historyResult.reason));
+      if (modelResult.status === 'fulfilled') setMetadata(modelResult.value);
+      else setMetadataError(getApiErrorMessage(modelResult.reason));
+    } catch (loadError) {
+      setDetail(null);
+      setError(getApiErrorMessage(loadError, 'Could not load this engine.'));
     } finally {
       setLoading(false);
     }
   };
 
-  const loadReplayData = async (eid) => {
+  useEffect(() => { loadEngine(); }, [id]);
+
+  const loadReplay = async () => {
+    if (!detail?.engine_id) return;
+    setReplayLoading(true);
+    setReplayError('');
     try {
-      const data = await api.replayEngine(eid, 4);
-      setReplayData(data);
-      if (data?.timeline_steps?.length > 0) {
-        setReplayIndex(data.timeline_steps.length - 1);
-      }
-    } catch (err) {
-      console.error('Failed to load replay data', err);
+      setReplay(await api.replayEngine(detail.engine_id, 10));
+    } catch (requestError) {
+      setReplay(null);
+      setReplayError(getApiErrorMessage(requestError, 'Historical replay could not be loaded.'));
+    } finally {
+      setReplayLoading(false);
     }
   };
 
-  // Playback timer
-  useEffect(() => {
-    if (isPlaying && replayData?.timeline_steps?.length > 0) {
-      timerRef.current = setInterval(() => {
-        setReplayIndex((prev) => {
-          if (prev >= replayData.timeline_steps.length - 1) {
-            setIsPlaying(false);
-            return prev;
-          }
-          return prev + 1;
-        });
-      }, 700 / playbackSpeed);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isPlaying, replayData, playbackSpeed]);
-
-  const currentReplayStep = replayData?.timeline_steps?.[replayIndex] || null;
+  const history = detail?.telemetry_history || [];
+  const sensors = useMemo(() => Object.keys(history[0] || {}).filter((key) => key.startsWith('sensor_')), [history]);
+  const selectedEngine = engines.find((engine) => engine.engine_id === detail?.engine_id);
+  const latest = history[history.length - 1];
 
   return (
-    <div className="space-y-5">
-      <DisclaimerBanner />
-
-      {/* Header Bar */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => navigate('/')}
-            className="p-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:text-[#1F2328] dark:hover:text-[#E6EDF3] transition-colors"
-            title="Return to fleet overview"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
-                Engine ENG-{String(engineId).padStart(3, '0')} Telemetry
-              </h1>
-              {engineDetail && <EngineStatusBadge tier={engineDetail.urgency_tier} size="sm" />}
-            </div>
-            <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
-              NASA C-MAPSS FD001 &bull; Historical Sensor Degradation & Playback
-            </p>
-          </div>
-        </div>
-
-        {/* Engine switcher dropdown */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-[#656D76] dark:text-[#9198A1]">Switch Engine:</label>
-          <select
-            value={engineId}
-            onChange={(e) => {
-              setEngineId(e.target.value);
-              navigate(`/engines/${e.target.value}`);
-            }}
-            className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] text-[#1F2328] dark:text-[#E6EDF3] text-xs rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#0969DA]"
-          >
-            {Array.from({ length: 100 }, (_, i) => i + 1).map((n) => (
-              <option key={n} value={n}>
-                ENG-{String(n).padStart(3, '0')}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {loading ? (
-        <div className="p-16 text-center text-xs text-[#656D76] dark:text-[#9198A1]">
-          Loading engine sensor stream...
-        </div>
-      ) : error ? (
-        <div className="p-8 text-center text-xs text-[#CF222E]">
-          {error}
-        </div>
-      ) : engineDetail ? (
+    <div className="page-stack">
+      <PageHeading
+        eyebrow="FLEET / ENGINE RECORD"
+        title={detail ? `Engine ${formatEngine(detail.engine_id)}` : 'Engine details'}
+        description="Historical NASA C-MAPSS telemetry and the backend’s current RUL estimate."
+        actions={<Link className="button button-quiet" to="/engines"><ArrowLeft size={15} /> {t('Back to engines')}</Link>}
+      />
+      {loading || error ? <StateBlock loading={loading} error={error} onRetry={loadEngine} /> : detail && (
         <>
-          {/* Key Metrics Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-                Observed Cycles
-              </span>
-              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                {engineDetail.last_cycle}{' '}
-                <span className="text-xs font-normal text-[#848D97]">cycles</span>
-              </div>
+          <div className="engine-overview">
+            <div className="engine-rul">
+              <span className="metric-label">{t('Estimated remaining life')}</span>
+              <strong>{detail.predicted_rul === null ? '—' : Number(detail.predicted_rul).toFixed(1)}<small>{detail.predicted_rul === null ? '' : ' cycles'}</small></strong>
+              <p>{t('Model estimate based on the latest observed telemetry row.')}</p>
             </div>
-
-            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-                Estimated RUL
-              </span>
-              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#0969DA] dark:text-[#4493F8]">
-                {engineDetail.predicted_rul}{' '}
-                <span className="text-xs font-normal text-[#848D97]">cycles</span>
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-                Benchmark Ground Truth
-              </span>
-              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1A7F37] dark:text-[#3FB950]">
-                {engineDetail.true_rul !== null ? `${engineDetail.true_rul} cycles` : '—'}
-              </div>
-            </div>
-
-            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-                Model Residual Error
-              </span>
-              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                {engineDetail.true_rul !== null
-                  ? `${(engineDetail.predicted_rul - engineDetail.true_rul).toFixed(1)} cycles`
-                  : '—'}
-              </div>
+            <div className="engine-facts">
+              <div><span>{t('Last observed cycle')}</span><strong className="numeric">{detail.last_cycle}</strong></div>
+              <div><span>{t('Assessment tier')}</span><RiskBadge tier={detail.urgency_tier} /></div>
+              <div><span>{t('Dataset split')}</span><strong>{detail.dataset_split || '—'}</strong></div>
+              <div><span>{t('Test-set reference RUL')}</span><strong>{detail.true_rul === null ? t('Not available') : formatRul(detail.true_rul)}</strong></div>
+              <div><span>{t('Model version')}</span><strong>{metadata?.version || '—'}</strong></div>
             </div>
           </div>
+          <Disclaimer />
+          <p className="quiet-explainer">{t('RUL estimates cycles to the dataset-defined end-of-life endpoint. The test-set reference value is supplied for dataset evaluation and is not operational telemetry.')}</p>
 
-          {/* SIMULATED HISTORICAL REPLAY PLAYER (Neutral, disciplined enterprise design) */}
-          {replayData?.timeline_steps && (
-            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D1D9E0] dark:border-[#30363D]">
-                <div>
-                  <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                    Historical Degradation Replay
-                  </h3>
-                  <p className="text-[11px] text-[#656D76] dark:text-[#848D97]">
-                    Simulate chronological sensor degradation and RUL decline across historical flight cycles.
-                  </p>
-                </div>
-
-                {/* Controls */}
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      if (replayIndex >= replayData.timeline_steps.length - 1) {
-                        setReplayIndex(0);
-                      }
-                      setIsPlaying(!isPlaying);
-                    }}
-                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
-                      isPlaying
-                        ? 'bg-[#EFF2F5] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] border-[#D1D9E0] dark:border-[#30363D]'
-                        : 'bg-[#0969DA] text-white border-[#0969DA] hover:bg-[#0856b3]'
-                    }`}
-                  >
-                    {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                    {isPlaying ? 'Pause' : 'Play Timeline'}
-                  </button>
-
-                  <button
-                    onClick={() => {
-                      setIsPlaying(false);
-                      setReplayIndex(0);
-                    }}
-                    className="p-1 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
-                    title="Reset to initial cycle"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                  </button>
-
-                  <button
-                    onClick={() => setPlaybackSpeed((s) => (s === 1 ? 2 : s === 2 ? 4 : 1))}
-                    className="px-2 py-1 rounded-md border border-[#D1D9E0] dark:border-[#30363D] text-[11px] font-mono text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
-                  >
-                    {playbackSpeed}x
-                  </button>
-                </div>
-              </div>
-
-              {/* Scrubber slider */}
-              <div className="space-y-1.5">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="text-[#656D76] dark:text-[#9198A1]">
-                    Cycle: <strong className="font-mono text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep?.cycle || 1}</strong> of {engineDetail.last_cycle}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[#656D76] dark:text-[#9198A1]">
-                      Predicted RUL: <strong className="font-mono text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep?.predicted_rul}c</strong>
-                    </span>
-                    {currentReplayStep && <EngineStatusBadge tier={currentReplayStep.urgency_tier} />}
-                    {currentReplayStep?.is_anomalous && (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30">
-                        Anomaly (Score: {currentReplayStep.anomaly_score})
-                      </span>
-                    )}
+          <div className="content-grid detail-grid">
+            <Panel className="sensor-panel">
+              <PanelHeading
+                title="Sensor history"
+                description={`Historical dataset observations · ${history.length} cycles`}
+                action={<label className="select-control"><span className="sr-only">{t('Select sensor')}</span><select aria-label={t('Select sensor')} value={sensor} onChange={(event) => setSensor(event.target.value)}>{sensors.map((key) => <option value={key} key={key}>{sensorLabel(key)}</option>)}</select><ChevronDown size={14} /></label>}
+              />
+              {history.length === 0 ? <StateBlock empty="No telemetry history is available for this engine." /> : (
+                <>
+                  <div className="chart-wrap chart-sensor">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={history} margin={{ top: 12, right: 12, bottom: 2, left: -10 }}>
+                        <CartesianGrid stroke="#e8e4dc" strokeDasharray="3 5" />
+                        <XAxis dataKey="cycle" type="number" domain={['dataMin', 'dataMax']} tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 11 }} label={{ value: t('Operating cycle'), position: 'insideBottom', offset: -2, fill: '#77746d', fontSize: 11 }} />
+                        <YAxis type="number" domain={['auto', 'auto']} tickLine={false} axisLine={false} tick={{ fill: '#918d85', fontSize: 10 }} width={52} />
+                        <Tooltip contentStyle={{ background: '#fbfaf7', border: '1px solid #d4d1ca', borderRadius: 8, fontSize: 12 }} labelFormatter={(cycle) => `${t('Cycle')} ${cycle}`} formatter={(value) => [Number(value).toFixed(4), sensorLabel(sensor)]} />
+                        <Line type="monotone" dataKey={sensor} stroke="#c66f5e" strokeWidth={2} dot={false} activeDot={{ r: 4, fill: '#c66f5e' }} isAnimationActive={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
                   </div>
-                </div>
-
-                <input
-                  type="range"
-                  min="0"
-                  max={replayData.timeline_steps.length - 1}
-                  value={replayIndex}
-                  onChange={(e) => {
-                    setIsPlaying(false);
-                    setReplayIndex(parseInt(e.target.value, 10));
-                  }}
-                  className="w-full accent-[#0969DA] cursor-pointer"
-                />
-              </div>
-
-              {/* Telemetry Snapshot Tiles */}
-              {currentReplayStep && (
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1 text-center font-mono text-xs">
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">LPC Temp (s2)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_2_lpc_temp}°R</span>
-                  </div>
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">HPC Temp (s3)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_3_hpc_temp}°R</span>
-                  </div>
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">LPT Temp (s4)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_4_lpt_temp}°R</span>
-                  </div>
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">Total HPC Pres (s7)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_7_hpc_pres} psia</span>
-                  </div>
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">Static HPC Pres (s11)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_11_static_pres} psia</span>
-                  </div>
-                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
-                    <span className="text-[10px] text-[#848D97] block font-sans">Fuel Flow (s12)</span>
-                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_12_fuel_flow}</span>
-                  </div>
-                </div>
+                  <p className="chart-note">{t('Historical dataset values; sensor identifiers are shown without assumed physical units.')}</p>
+                </>
               )}
-            </div>
-          )}
-
-          {/* Maintenance Advisory Notice */}
-          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                Decision-Support Maintenance Advisory ({engineDetail.urgency_tier})
-              </span>
-            </div>
-            <p className="text-xs text-[#656D76] dark:text-[#9198A1] leading-relaxed">
-              {engineDetail.recommendation}
-            </p>
-            <div className="pt-2 flex items-center gap-2">
-              <button
-                onClick={() => navigate('/predictions', { state: { engineId, lastCycle: engineDetail.last_cycle } })}
-                className="px-3 py-1.5 rounded-md bg-[#0969DA] text-white text-xs font-medium hover:bg-[#0856b3] transition-colors"
-              >
-                Simulate Parameters in Predictor
-              </button>
-              <button
-                onClick={() => navigate('/maintenance')}
-                className="px-3 py-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#1F2328] dark:text-[#E6EDF3] text-xs font-medium hover:bg-[#F6F8FA] dark:hover:bg-[#21262D] transition-colors"
-              >
-                View Maintenance Queue
-              </button>
-            </div>
+            </Panel>
+            <Panel>
+              <PanelHeading title="Latest observed values" description={latest ? `${t('Values at cycle')} ${latest.cycle}` : 'No observation available'} />
+              {latest && <div className="reading-list">
+                {Object.entries(latest).filter(([key]) => key !== 'cycle').map(([key, value]) => (
+                  <div className="reading-row" key={key}><span>{sensorLabel(key)}</span><strong className="numeric">{Number(value).toFixed(4)}</strong></div>
+                ))}
+              </div>}
+            </Panel>
           </div>
 
-          {/* Time Series Degradation Chart */}
-          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D1D9E0] dark:border-[#30363D]">
-              <div>
-                <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                  Sensor Degradation Telemetry
-                </h3>
-                <p className="text-[11px] text-[#656D76] dark:text-[#848D97]">
-                  Telemetry progression from Cycle 1 to Cycle {engineDetail.last_cycle}.
-                </p>
-              </div>
+          <HistoricalReplay
+            data={replay}
+            loading={replayLoading}
+            error={replayError}
+            onLoad={loadReplay}
+            detectorLoaded={metadata?.anomaly_detector_loaded === true}
+          />
 
-              {/* Group tabs */}
-              <div className="inline-flex rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-[#F6F8FA] dark:bg-[#0D1117] p-0.5 text-xs">
-                <button
-                  onClick={() => setActiveSensorGroup('temp')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                    activeSensorGroup === 'temp'
-                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
-                      : 'text-[#656D76] dark:text-[#9198A1]'
-                  }`}
-                >
-                  Temperatures
-                </button>
-                <button
-                  onClick={() => setActiveSensorGroup('pressure')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                    activeSensorGroup === 'pressure'
-                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
-                      : 'text-[#656D76] dark:text-[#9198A1]'
-                  }`}
-                >
-                  Pressures
-                </button>
-                <button
-                  onClick={() => setActiveSensorGroup('dynamics')}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                    activeSensorGroup === 'dynamics'
-                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
-                      : 'text-[#656D76] dark:text-[#9198A1]'
-                  }`}
-                >
-                  Speed & Flow
-                </button>
-              </div>
-            </div>
-
-            {/* Recharts with disciplined neutral styling */}
-            <div className="h-80 w-full pt-2">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={engineDetail.telemetry_history}>
-                  <CartesianGrid strokeDasharray="2 2" stroke="#EAEEF2" className="dark:stroke-[#21262D]" />
-                  <XAxis
-                    dataKey="cycle"
-                    stroke="#848D97"
-                    fontSize={11}
-                    tickLine={false}
-                    label={{ value: 'Flight Cycle', position: 'insideBottom', offset: -4, fill: '#848D97', fontSize: 11 }}
-                  />
-                  <YAxis stroke="#848D97" fontSize={11} tickLine={false} domain={['auto', 'auto']} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#FFFFFF',
-                      borderColor: '#D1D9E0',
-                      borderRadius: '6px',
-                      fontSize: '11px',
-                      color: '#1F2328',
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                    }}
-                  />
-                  <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
-
-                  {activeSensorGroup === 'temp' && (
-                    <>
-                      <Line type="monotone" dataKey="sensor_2" name="LPC Outlet Temp (s2, °R)" stroke="#CF222E" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_3" name="HPC Outlet Temp (s3, °R)" stroke="#9A6700" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_4" name="LPT Outlet Temp (s4, °R)" stroke="#0969DA" dot={false} strokeWidth={1.5} />
-                    </>
-                  )}
-
-                  {activeSensorGroup === 'pressure' && (
-                    <>
-                      <Line type="monotone" dataKey="sensor_7" name="Total HPC Pressure (s7, psia)" stroke="#0969DA" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_11" name="Static HPC Pressure (s11, psia)" stroke="#8250DF" dot={false} strokeWidth={1.5} />
-                    </>
-                  )}
-
-                  {activeSensorGroup === 'dynamics' && (
-                    <>
-                      <Line type="monotone" dataKey="sensor_8" name="Fan Speed (s8, rpm)" stroke="#1A7F37" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_12" name="Fuel Flow Ratio (s12)" stroke="#9A6700" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_15" name="Bypass Ratio (s15)" stroke="#656D76" dot={false} strokeWidth={1.5} />
-                    </>
-                  )}
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
+          <Panel>
+            <PanelHeading title="Prediction history" description="Stored inferences for this engine from the backend audit log." action={<Link to="/history" className="text-link">{t('Full history')} <ChevronDown size={14} /></Link>} />
+            {historyError ? <StateBlock error={historyError} /> : records.length === 0 ? <StateBlock empty="No inference records have been stored for this engine." /> : (
+              <div className="table-scroll"><table className="data-table"><thead><tr><th>{t('Recorded at')}</th><th>{t('Cycle')}</th><th>{t('Estimated RUL')}</th><th>{t('Tier')}</th><th>{t('Model')}</th></tr></thead><tbody>
+                {records.slice(0, 8).map((record) => <tr key={record.id}><td>{formatTimestamp(record.created_at)}</td><td className="numeric">{record.cycle}</td><td className="numeric rul-value">{formatRul(record.predicted_rul)}</td><td><RiskBadge tier={record.urgency_tier} /></td><td>{record.model_version}</td></tr>)}
+              </tbody></table></div>
+            )}
+          </Panel>
+          <div className="detail-meta"><span>Source: {metadata?.dataset || 'NASA C-MAPSS FD001'}</span><span>{selectedEngine ? `${selectedEngine.total_cycles} records in this engine’s test series` : ''}</span><span>{metadataError || 'Prediction timestamp is not provided by the engine-detail endpoint.'}</span></div>
         </>
-      ) : null}
+      )}
     </div>
   );
 }

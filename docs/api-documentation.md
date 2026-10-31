@@ -83,6 +83,7 @@ Retrieves historical sensor telemetry from cycle 1 to the last recorded cycle fo
       "sensor_2": 642.12,
       "sensor_3": 1582.4,
       "sensor_4": 1399.1,
+      "sensor_6": 21.61,
       "sensor_7": 554.8,
       "sensor_8": 2388.02,
       "sensor_9": 9053.4,
@@ -147,6 +148,8 @@ Validates input multi-channel sensor readings, passes them to the fitted RandomF
 }
 ```
 
+The response also includes `is_anomalous`, `anomaly_score`, and `top_sensor_drifts`. The first two come from the optional Isolation Forest artifact; the drift list reports the current value, healthy baseline mean, delta, z-score, and trend for the most shifted sensors. Check `GET /api/model-metadata` for the `anomaly_detector_loaded` status.
+
 ---
 
 ## 5. Audit History
@@ -159,4 +162,4 @@ Returns historical inference executions recorded in the local SQLite database.
 ## 6. Model Metadata
 `GET /api/model-metadata`
 
-Returns serialized training hyperparameters, validation scores (5-fold GroupKFold), test set metrics, and feature importance dictionary.
+Returns serialized training hyperparameters, validation scores (5-fold GroupKFold), test set metrics, feature importance dictionary, and `anomaly_detector_loaded` indicating whether the optional Isolation Forest artifact loaded successfully.

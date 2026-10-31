@@ -80,6 +80,9 @@ python scripts/prepare_dataset.py
 
 # 3. Train leak-free RandomForest pipeline & evaluate on test fleet
 python scripts/train_model.py
+
+# 4. Train Isolation Forest anomaly detector and baseline sensor statistics
+python scripts/train_anomaly_detector.py
 ```
 
 ### 3. Run Automated Tests
