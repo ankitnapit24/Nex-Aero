@@ -23,8 +23,11 @@ CONSTANT_SENSORS = [
 # Informative sensors with meaningful degradation trends
 INFORMATIVE_SENSORS = [s for s in SENSOR_COLUMNS if s not in CONSTANT_SENSORS]
 
-# Standard baseline feature set (excluding engine_id to prevent identity leakage)
+# Standard baseline feature set for RUL prediction (excluding engine_id to prevent identity leakage)
 DEFAULT_FEATURE_COLUMNS = ["cycle"] + SETTING_COLUMNS + INFORMATIVE_SENSORS
+
+# Dedicated feature set for unsupervised anomaly detection (strictly physical parameters: excluding cycle, engine_id, and RUL)
+ANOMALY_FEATURE_COLUMNS = SETTING_COLUMNS + INFORMATIVE_SENSORS
 
 # Evaluation and Target Parameters
 RUL_CAP_DEFAULT = 125  # Standard literature piece-wise linear RUL ceiling

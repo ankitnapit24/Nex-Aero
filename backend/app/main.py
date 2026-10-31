@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.app.core.config import settings
-from backend.app.api.routes import health, engine, prediction
+from backend.app.api.routes import health, engine, prediction, alert
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -20,6 +20,7 @@ app.add_middleware(
 app.include_router(health.router, prefix=settings.API_PREFIX, tags=["Health"])
 app.include_router(engine.router, prefix=settings.API_PREFIX, tags=["Engines"])
 app.include_router(prediction.router, prefix=settings.API_PREFIX, tags=["Predictions"])
+app.include_router(alert.router, prefix=f"{settings.API_PREFIX}/alerts", tags=["Alerts"])
 
 @app.get("/")
 def root():

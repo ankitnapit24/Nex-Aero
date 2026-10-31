@@ -15,6 +15,8 @@ export default function Predictions() {
   const [predictionResult, setPredictionResult] = useState(null);
   const [predictionHistory, setPredictionHistory] = useState([]);
   const [error, setError] = useState(null);
+  const [shapExplanation, setShapExplanation] = useState(null);
+  const [loadingShap, setLoadingShap] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -68,7 +70,7 @@ export default function Predictions() {
           sensor_2: last.sensor_2,
           sensor_3: last.sensor_3,
           sensor_4: last.sensor_4,
-          sensor_6: 21.61,
+          sensor_6: last.sensor_6 ?? 21.61,
           sensor_7: last.sensor_7,
           sensor_8: last.sensor_8,
           sensor_9: last.sensor_9,
@@ -101,6 +103,7 @@ export default function Predictions() {
     try {
       setSubmitting(true);
       setError(null);
+      setShapExplanation(null);
       const payload = {
         engine_id: parseInt(engineId, 10),
         ...formData,
@@ -112,6 +115,22 @@ export default function Predictions() {
       setError(err.response?.data?.detail || 'Inference execution failed.');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleComputeShap = async () => {
+    try {
+      setLoadingShap(true);
+      const payload = {
+        engine_id: parseInt(engineId, 10),
+        ...formData,
+      };
+      const res = await api.explainCustom(payload);
+      setShapExplanation(res.explanation);
+    } catch (err) {
+      console.error('Failed to compute SHAP attributions:', err);
+    } finally {
+      setLoadingShap(false);
     }
   };
 
@@ -414,6 +433,50 @@ export default function Predictions() {
                   <p className="text-[11px] leading-relaxed">
                     {predictionResult.recommendation}
                   </p>
+                </div>
+
+                {/* TreeSHAP Explainability Button & Card */}
+                <div className="border-t border-[#D1D9E0] dark:border-[#30363D] pt-3">
+                  {!shapExplanation ? (
+                    <button
+                      type="button"
+                      disabled={loadingShap}
+                      onClick={handleComputeShap}
+                      className="w-full py-1.5 px-3 rounded border border-[#0969DA] text-[#0969DA] dark:text-[#4493F8] hover:bg-[#0969DA]/10 text-xs font-medium transition-colors"
+                    >
+                      {loadingShap ? 'Calculating TreeSHAP Shapley Values...' : 'Calculate Local TreeSHAP Attributions'}
+                    </button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                          TreeSHAP Feature Contributions:
+                        </span>
+                        <span className="text-[10px] text-[#848D97] font-mono">
+                          Base: {shapExplanation.base_expected_value}c
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {shapExplanation.contributions.slice(0, 5).map((c, idx) => (
+                          <div
+                            key={idx}
+                            className="p-1.5 rounded bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#EAEEF2] dark:border-[#21262D] flex justify-between items-center text-[10px] font-mono"
+                          >
+                            <span className="text-[#1F2328] dark:text-[#E6EDF3] font-sans">
+                              {c.feature} ({c.description})
+                            </span>
+                            <span
+                              className={`font-semibold ${
+                                c.shap_value < 0 ? 'text-[#CF222E]' : 'text-[#1A7F37]'
+                              }`}
+                            >
+                              {c.shap_value > 0 ? `+${c.shap_value}` : c.shap_value}c
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             ) : (

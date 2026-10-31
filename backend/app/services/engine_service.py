@@ -79,6 +79,7 @@ class EngineService:
                 sensor_2=round(float(row["sensor_2"]), 2),
                 sensor_3=round(float(row["sensor_3"]), 2),
                 sensor_4=round(float(row["sensor_4"]), 2),
+                sensor_6=round(float(row["sensor_6"]), 2),
                 sensor_7=round(float(row["sensor_7"]), 2),
                 sensor_8=round(float(row["sensor_8"]), 2),
                 sensor_9=round(float(row["sensor_9"]), 2),
