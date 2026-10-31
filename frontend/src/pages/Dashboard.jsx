@@ -65,9 +65,9 @@ export default function Dashboard() {
               <table className="data-table">
                 <thead><tr><th>{t('Engine')}</th><th>{t('Last cycle')}</th><th>{t('Estimated RUL')}</th><th>{t('Assessment tier')}</th><th aria-label={t('Details')} /></tr></thead>
                 <tbody>
-                  {engines.slice(0, 8).map((engine) => (
+                  {engines.slice(0, 5).map((engine) => (
                     <tr key={engine.engine_id} className="clickable-row">
-                      <td><Link className="table-primary-link" to={`/engines/${engine.engine_id}`}>{formatEngine(engine.engine_id)}</Link><span className="table-subtext">{engine.dataset_split} split</span></td>
+                      <td><Link className="table-primary-link" to={`/engines/${engine.engine_id}`}>{formatEngine(engine.engine_id)}</Link></td>
                       <td className="numeric">{engine.last_cycle}</td>
                       <td className="numeric rul-value">{formatRul(engine.predicted_rul)}</td>
                       <td><RiskBadge tier={engine.urgency_tier} /></td>
@@ -81,7 +81,7 @@ export default function Dashboard() {
           <div className="panel-footnote">{t('Risk tiers are illustrative demo categories, not approved maintenance limits.')}</div>
         </Panel>
 
-        <Panel>
+        <Panel className="dashboard-recent-panel">
           <PanelHeading title="Latest updates" description="Recent inference records written by the backend." action={<Link className="text-link" to="/history">{t('View history')} <ArrowRight size={14} /></Link>} />
           {supportError && records.length === 0 ? <StateBlock error={supportError} onRetry={loadData} /> : recentEvents.length === 0 ? (
             <StateBlock loading={loading} empty={!loading ? 'No prediction events have been recorded yet.' : ''} />
