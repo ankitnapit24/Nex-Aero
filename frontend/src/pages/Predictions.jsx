@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Cpu, Send, RefreshCw, CheckCircle, Clock, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Cpu, Send, RefreshCw, CheckCircle, Clock, AlertTriangle, ArrowRight, ShieldAlert, BarChart } from 'lucide-react';
 import api from '../services/api';
 import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
 import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
@@ -68,7 +68,7 @@ export default function Predictions() {
           sensor_2: last.sensor_2,
           sensor_3: last.sensor_3,
           sensor_4: last.sensor_4,
-          sensor_6: 21.61, // standard constant bypass
+          sensor_6: 21.61,
           sensor_7: last.sensor_7,
           sensor_8: last.sensor_8,
           sensor_9: last.sensor_9,
@@ -123,10 +123,10 @@ export default function Predictions() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
             <Cpu className="w-6 h-6 text-cyan-400" />
-            Live Machine-Learning RUL Predictor
+            Live Machine-Learning RUL Predictor & Anomaly Detector
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Simulate turbofan operational cycles and trigger trained RandomForest inference on demand.
+            Simulate turbofan operational cycles, trigger RandomForest RUL inference, and inspect Isolation Forest anomaly scores.
           </p>
         </div>
 
@@ -346,7 +346,7 @@ export default function Predictions() {
               {submitting ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Executing RandomForest Pipeline...
+                  Executing RandomForest Pipeline & Anomaly Detector...
                 </>
               ) : (
                 <>
@@ -380,10 +380,39 @@ export default function Predictions() {
                     {predictionResult.predicted_rul_cycles}{' '}
                     <span className="text-sm font-normal text-slate-400">cycles</span>
                   </div>
-                  <div className="mt-3">
+                  <div className="mt-3 flex items-center justify-center gap-2">
                     <EngineStatusBadge tier={predictionResult.urgency_tier} size="lg" />
+                    {predictionResult.is_anomalous ? (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-rose-950/80 border border-rose-600 text-rose-300">
+                        ANOMALOUS (Score: {predictionResult.anomaly_score})
+                      </span>
+                    ) : (
+                      <span className="px-2.5 py-1 rounded-full text-xs font-mono bg-emerald-950/60 border border-emerald-600/40 text-emerald-300">
+                        Nominal Bounds (Score: {predictionResult.anomaly_score})
+                      </span>
+                    )}
                   </div>
                 </div>
+
+                {/* Local Feature Attribution / Sensor Drift Explanations */}
+                {predictionResult.top_sensor_drifts?.length > 0 && (
+                  <div className="p-3 bg-slate-950/90 rounded-lg border border-slate-800 space-y-2">
+                    <div className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
+                      <BarChart className="w-3.5 h-3.5" />
+                      Top Sensor Degradation Drift Drivers (vs Baseline):
+                    </div>
+                    <div className="space-y-1.5 text-[11px] font-mono">
+                      {predictionResult.top_sensor_drifts.map((d) => (
+                        <div key={d.feature} className="flex items-center justify-between text-slate-300 bg-slate-900/60 p-1.5 rounded">
+                          <span className="font-sans text-slate-200">{d.description}</span>
+                          <span className={d.z_score > 1.5 ? 'text-rose-400' : d.z_score < -1.5 ? 'text-cyan-400' : 'text-slate-300'}>
+                            {d.z_score > 0 ? `+${d.z_score}` : d.z_score}σ ({d.delta > 0 ? `+${d.delta}` : d.delta})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="text-xs space-y-1 text-slate-300 bg-slate-950/60 p-3 rounded-lg border border-slate-800">
                   <div className="font-semibold text-slate-200">Recommended Action:</div>

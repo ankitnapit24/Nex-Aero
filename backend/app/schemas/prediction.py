@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 class TelemetryInput(BaseModel):
     engine_id: int = Field(..., examples=[1])
@@ -29,6 +29,9 @@ class PredictionResponse(BaseModel):
     predicted_rul_cycles: float
     raw_rul_cycles: float
     urgency_tier: str
+    is_anomalous: bool = False
+    anomaly_score: float = 0.0
+    top_sensor_drifts: List[Dict[str, Any]] = []
     recommendation: str
     model_version: str
     evaluated_at: str
@@ -44,3 +47,11 @@ class PredictionRecordItem(BaseModel):
     recommendation: str
     model_version: str
     created_at: str
+
+class ReplayStep(BaseModel):
+    engine_id: int
+    cycle: int
+    predicted_rul_cycles: float
+    urgency_tier: str
+    is_anomalous: bool
+    telemetry: Dict[str, float]

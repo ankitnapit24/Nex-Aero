@@ -46,6 +46,12 @@ export const api = {
     const res = await apiClient.get('/api/model-metadata');
     return res.data;
   },
+
+  // Historical degradation replay simulation
+  replayEngine: async (engineId, sampleStride = 5) => {
+    const res = await apiClient.post(`/api/demo/replay?engine_id=${engineId}&sample_stride=${sampleStride}`);
+    return res.data;
+  },
 };
 
 export default api;

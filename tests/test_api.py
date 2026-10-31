@@ -1,6 +1,6 @@
 """
 AeroGuard AI - Backend API Integration Tests
-Directly tests API route handlers, database persistence, and validation logic.
+Directly tests API route handlers, database persistence, replay simulation, and anomaly detection.
 """
 
 import os
@@ -14,7 +14,7 @@ if BASE_DIR not in sys.path:
 
 from backend.app.api.routes.health import get_health
 from backend.app.api.routes.engine import get_engines, get_engine
-from backend.app.api.routes.prediction import predict_rul, get_prediction_history, get_model_metadata
+from backend.app.api.routes.prediction import predict_rul, get_prediction_history, get_model_metadata, replay_engine_history
 from backend.app.schemas.prediction import TelemetryInput
 from backend.app.database.session import SessionLocal
 
@@ -78,6 +78,9 @@ def test_predict_and_persistence(db):
     assert result["engine_id"] == 1
     assert result["predicted_rul_cycles"] >= 0.0
     assert result["urgency_tier"] in ["CRITICAL", "WARNING", "MODERATE", "NOMINAL"]
+    assert "anomaly_score" in result
+    assert "is_anomalous" in result
+    assert "top_sensor_drifts" in result
 
     # Verify persisted in database
     history = get_prediction_history(limit=5, db=db)
@@ -89,3 +92,13 @@ def test_model_metadata():
     assert meta["model_name"] == "RandomForestRegressor_FD001"
     assert "cv_validation_metrics" in meta
     assert "nasa_test_metrics" in meta
+
+def test_replay_endpoint():
+    res = replay_engine_history(engine_id=34, sample_stride=10)
+    assert res["engine_id"] == 34
+    assert res["mode"] == "SIMULATED_HISTORICAL_REPLAY"
+    assert "timeline_steps" in res
+    assert len(res["timeline_steps"]) > 0
+    first_step = res["timeline_steps"][0]
+    assert "predicted_rul" in first_step
+    assert "key_telemetry" in first_step

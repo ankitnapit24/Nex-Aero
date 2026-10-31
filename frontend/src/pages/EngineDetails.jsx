@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   ResponsiveContainer,
@@ -10,7 +10,21 @@ import {
   CartesianGrid,
   Legend,
 } from 'recharts';
-import { Plane, AlertTriangle, ArrowLeft, Cpu, Activity, Gauge, Thermometer, Wind } from 'lucide-react';
+import {
+  Plane,
+  AlertTriangle,
+  ArrowLeft,
+  Cpu,
+  Activity,
+  Gauge,
+  Thermometer,
+  Wind,
+  Play,
+  Pause,
+  RotateCcw,
+  FastForward,
+  ShieldAlert,
+} from 'lucide-react';
 import api from '../services/api';
 import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
 import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
@@ -18,11 +32,18 @@ import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
 export default function EngineDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [engineId, setEngineId] = useState(id || '34'); // Engine 34 is critical example
+  const [engineId, setEngineId] = useState(id || '34');
   const [engineDetail, setEngineDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeChartGroup, setActiveChartGroup] = useState('temp'); // 'temp', 'pressure', 'speed'
+  const [activeChartGroup, setActiveChartGroup] = useState('temp');
+
+  // Replay State
+  const [replayData, setReplayData] = useState(null);
+  const [replayIndex, setReplayIndex] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const timerRef = useRef(null);
 
   useEffect(() => {
     if (id) {
@@ -32,6 +53,9 @@ export default function EngineDetails() {
 
   useEffect(() => {
     fetchEngineDetail(engineId);
+    loadReplayData(engineId);
+    setIsPlaying(false);
+    setReplayIndex(0);
   }, [engineId]);
 
   const fetchEngineDetail = async (eid) => {
@@ -46,6 +70,40 @@ export default function EngineDetails() {
       setLoading(false);
     }
   };
+
+  const loadReplayData = async (eid) => {
+    try {
+      const data = await api.replayEngine(eid, 4);
+      setReplayData(data);
+      if (data?.timeline_steps?.length > 0) {
+        setReplayIndex(data.timeline_steps.length - 1);
+      }
+    } catch (err) {
+      console.error('Failed to load replay data', err);
+    }
+  };
+
+  // Playback timer
+  useEffect(() => {
+    if (isPlaying && replayData?.timeline_steps?.length > 0) {
+      timerRef.current = setInterval(() => {
+        setReplayIndex((prev) => {
+          if (prev >= replayData.timeline_steps.length - 1) {
+            setIsPlaying(false);
+            return prev;
+          }
+          return prev + 1;
+        });
+      }, 700 / playbackSpeed);
+    } else {
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [isPlaying, replayData, playbackSpeed]);
+
+  const currentReplayStep = replayData?.timeline_steps?.[replayIndex] || null;
 
   return (
     <div className="space-y-6">
@@ -66,7 +124,7 @@ export default function EngineDetails() {
               {engineDetail && <EngineStatusBadge tier={engineDetail.urgency_tier} size="lg" />}
             </h1>
             <p className="text-xs text-slate-400 mt-0.5">
-              Multi-cycle degradation trends and Remaining Useful Life diagnostic trajectory.
+              Historical multi-sensor degradation telemetry & interactive cycle playback simulation.
             </p>
           </div>
         </div>
@@ -109,7 +167,7 @@ export default function EngineDetails() {
               <div className="mt-2 text-2xl font-bold font-mono text-cyan-400">
                 Cycle {engineDetail.last_cycle}
               </div>
-              <span className="text-[11px] text-slate-400">Flight cycles observed</span>
+              <span className="text-[11px] text-slate-400">Historical flight cycles observed</span>
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
@@ -117,7 +175,7 @@ export default function EngineDetails() {
               <div className="mt-2 text-2xl font-bold font-mono text-white">
                 {engineDetail.predicted_rul} <span className="text-xs text-slate-400 font-normal">cycles</span>
               </div>
-              <span className="text-[11px] text-slate-400">RandomForest inference</span>
+              <span className="text-[11px] text-slate-400">RandomForest model inference</span>
             </div>
 
             <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
@@ -138,6 +196,131 @@ export default function EngineDetails() {
               <span className="text-[11px] text-slate-400">Model estimation delta</span>
             </div>
           </div>
+
+          {/* HISTORICAL REPLAY PLAYER COMPONENT */}
+          {replayData?.timeline_steps && (
+            <div className="bg-slate-900/80 border border-cyan-800/40 rounded-xl p-5 backdrop-blur-md space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-lg bg-cyan-950 border border-cyan-700/60 text-cyan-400">
+                    <FastForward className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+                      Simulated Historical Degradation Replay
+                      <span className="text-[10px] font-mono font-normal px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
+                        Historical Simulation &bull; Never Live Aircraft Telemetry
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Scrub across historical operational cycles to observe progressive HPC degradation, sensor drift, and RUL decline.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Player Controls */}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (replayIndex >= replayData.timeline_steps.length - 1) {
+                        setReplayIndex(0);
+                      }
+                      setIsPlaying(!isPlaying);
+                    }}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all ${
+                      isPlaying
+                        ? 'bg-amber-600 hover:bg-amber-500'
+                        : 'bg-cyan-600 hover:bg-cyan-500'
+                    }`}
+                  >
+                    {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                    {isPlaying ? 'Pause' : 'Play Timeline'}
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setIsPlaying(false);
+                      setReplayIndex(0);
+                    }}
+                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    title="Reset to Cycle 1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+
+                  <button
+                    onClick={() => setPlaybackSpeed((s) => (s === 1 ? 2 : s === 2 ? 4 : 1))}
+                    className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-xs font-mono"
+                    title="Toggle Playback Speed"
+                  >
+                    {playbackSpeed}x
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic Live Scrubber Bar */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-slate-400">
+                    Cycle Position: <strong className="text-cyan-400 font-mono">Cycle {currentReplayStep?.cycle || 1}</strong> of {engineDetail.last_cycle}
+                  </span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-400 text-xs">
+                      Replay Predicted RUL: <strong className="text-white font-mono">{currentReplayStep?.predicted_rul}c</strong>
+                    </span>
+                    {currentReplayStep && <EngineStatusBadge tier={currentReplayStep.urgency_tier} />}
+                    {currentReplayStep?.is_anomalous && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-950/80 border border-rose-700 text-rose-300">
+                        ANOMALY DETECTED (IForest: {currentReplayStep.anomaly_score})
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <input
+                  type="range"
+                  min="0"
+                  max={replayData.timeline_steps.length - 1}
+                  value={replayIndex}
+                  onChange={(e) => {
+                    setIsPlaying(false);
+                    setReplayIndex(parseInt(e.target.value, 10));
+                  }}
+                  className="w-full accent-cyan-500 cursor-pointer"
+                />
+              </div>
+
+              {/* Dynamic Telemetry Snapshot at this cycle */}
+              {currentReplayStep && (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2 text-center text-xs font-mono">
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">LPC Temp (s2)</div>
+                    <div className="text-rose-400 font-bold">{currentReplayStep.key_telemetry?.sensor_2_lpc_temp}°R</div>
+                  </div>
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">HPC Temp (s3)</div>
+                    <div className="text-amber-400 font-bold">{currentReplayStep.key_telemetry?.sensor_3_hpc_temp}°R</div>
+                  </div>
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">LPT Temp (s4)</div>
+                    <div className="text-cyan-400 font-bold">{currentReplayStep.key_telemetry?.sensor_4_lpt_temp}°R</div>
+                  </div>
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Total HPC Pres (s7)</div>
+                    <div className="text-blue-400 font-bold">{currentReplayStep.key_telemetry?.sensor_7_hpc_pres} psia</div>
+                  </div>
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Static HPC Pres (s11)</div>
+                    <div className="text-indigo-400 font-bold">{currentReplayStep.key_telemetry?.sensor_11_static_pres} psia</div>
+                  </div>
+                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
+                    <div className="text-[10px] text-slate-400">Fuel Flow (s12)</div>
+                    <div className="text-emerald-400 font-bold">{currentReplayStep.key_telemetry?.sensor_12_fuel_flow}</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Maintenance Advisory Notice */}
           <div className="bg-slate-900/70 border border-cyan-800/40 rounded-xl p-4 backdrop-blur-md">
