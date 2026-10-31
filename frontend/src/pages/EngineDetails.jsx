@@ -11,19 +11,16 @@ import {
   Legend,
 } from 'recharts';
 import {
-  Plane,
-  AlertTriangle,
   ArrowLeft,
   Cpu,
   Activity,
-  Gauge,
-  Thermometer,
-  Wind,
   Play,
   Pause,
   RotateCcw,
   FastForward,
-  ShieldAlert,
+  AlertOctagon,
+  Clock,
+  Layers,
 } from 'lucide-react';
 import api from '../services/api';
 import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
@@ -36,7 +33,7 @@ export default function EngineDetails() {
   const [engineDetail, setEngineDetail] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeChartGroup, setActiveChartGroup] = useState('temp');
+  const [activeSensorGroup, setActiveSensorGroup] = useState('temp');
 
   // Replay State
   const [replayData, setReplayData] = useState(null);
@@ -55,7 +52,6 @@ export default function EngineDetails() {
     fetchEngineDetail(engineId);
     loadReplayData(engineId);
     setIsPlaying(false);
-    setReplayIndex(0);
   }, [engineId]);
 
   const fetchEngineDetail = async (eid) => {
@@ -106,43 +102,46 @@ export default function EngineDetails() {
   const currentReplayStep = replayData?.timeline_steps?.[replayIndex] || null;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <DisclaimerBanner />
 
-      {/* Navigation & Selector */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
         <div className="flex items-center gap-3">
           <button
             onClick={() => navigate('/')}
-            className="p-2 rounded-lg bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition-colors"
+            className="p-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:text-[#1F2328] dark:hover:text-[#E6EDF3] transition-colors"
+            title="Return to fleet overview"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-              Engine ENG-{String(engineId).padStart(3, '0')} Telemetry
-              {engineDetail && <EngineStatusBadge tier={engineDetail.urgency_tier} size="lg" />}
-            </h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Historical multi-sensor degradation telemetry & interactive cycle playback simulation.
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
+                Engine ENG-{String(engineId).padStart(3, '0')} Telemetry
+              </h1>
+              {engineDetail && <EngineStatusBadge tier={engineDetail.urgency_tier} size="sm" />}
+            </div>
+            <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
+              NASA C-MAPSS FD001 &bull; Historical Sensor Degradation & Playback
             </p>
           </div>
         </div>
 
-        {/* Engine switcher */}
+        {/* Engine switcher dropdown */}
         <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400">Select Engine:</label>
+          <label className="text-xs text-[#656D76] dark:text-[#9198A1]">Switch Engine:</label>
           <select
             value={engineId}
             onChange={(e) => {
               setEngineId(e.target.value);
               navigate(`/engines/${e.target.value}`);
             }}
-            className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-cyan-500 font-mono"
+            className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] text-[#1F2328] dark:text-[#E6EDF3] text-xs rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#0969DA]"
           >
-            {Array.from({ length: 100 }, (_, i) => i + 1).map((num) => (
-              <option key={num} value={num}>
-                ENG-{String(num).padStart(3, '0')}
+            {Array.from({ length: 100 }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>
+                ENG-{String(n).padStart(3, '0')}
               </option>
             ))}
           </select>
@@ -150,75 +149,72 @@ export default function EngineDetails() {
       </div>
 
       {loading ? (
-        <div className="p-16 bg-slate-900/40 border border-slate-800 rounded-xl text-center text-slate-400 text-sm flex flex-col items-center gap-3">
-          <div className="w-6 h-6 border-2 border-cyan-500 border-t-transparent rounded-full animate-spin"></div>
-          Streaming multi-channel sensor telemetry...
+        <div className="p-16 text-center text-xs text-[#656D76] dark:text-[#9198A1]">
+          Loading engine sensor stream...
         </div>
       ) : error ? (
-        <div className="p-8 bg-slate-900/60 border border-rose-800/40 rounded-xl text-center text-rose-400 text-xs">
-          <p>{error}</p>
+        <div className="p-8 text-center text-xs text-[#CF222E]">
+          {error}
         </div>
       ) : engineDetail ? (
         <>
-          {/* Key Indicators Summary Card */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 font-medium uppercase">Last Recorded Cycle</span>
-              <div className="mt-2 text-2xl font-bold font-mono text-cyan-400">
-                Cycle {engineDetail.last_cycle}
+          {/* Key Metrics Grid */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                Observed Cycles
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                {engineDetail.last_cycle}{' '}
+                <span className="text-xs font-normal text-[#848D97]">cycles</span>
               </div>
-              <span className="text-[11px] text-slate-400">Historical flight cycles observed</span>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 font-medium uppercase">Predicted RUL</span>
-              <div className="mt-2 text-2xl font-bold font-mono text-white">
-                {engineDetail.predicted_rul} <span className="text-xs text-slate-400 font-normal">cycles</span>
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                Estimated RUL
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#0969DA] dark:text-[#4493F8]">
+                {engineDetail.predicted_rul}{' '}
+                <span className="text-xs font-normal text-[#848D97]">cycles</span>
               </div>
-              <span className="text-[11px] text-slate-400">RandomForest model inference</span>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 font-medium uppercase">NASA Ground Truth</span>
-              <div className="mt-2 text-2xl font-bold font-mono text-emerald-400">
-                {engineDetail.true_rul !== null ? `${engineDetail.true_rul} cycles` : 'N/A'}
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                Benchmark Ground Truth
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1A7F37] dark:text-[#3FB950]">
+                {engineDetail.true_rul !== null ? `${engineDetail.true_rul} cycles` : '—'}
               </div>
-              <span className="text-[11px] text-slate-400">RUL_FD001 official test target</span>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 font-medium uppercase">Prediction Variance</span>
-              <div className="mt-2 text-2xl font-bold font-mono text-slate-200">
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                Model Residual Error
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
                 {engineDetail.true_rul !== null
                   ? `${(engineDetail.predicted_rul - engineDetail.true_rul).toFixed(1)} cycles`
-                  : 'N/A'}
+                  : '—'}
               </div>
-              <span className="text-[11px] text-slate-400">Model estimation delta</span>
             </div>
           </div>
 
-          {/* HISTORICAL REPLAY PLAYER COMPONENT */}
+          {/* SIMULATED HISTORICAL REPLAY PLAYER (Neutral, disciplined enterprise design) */}
           {replayData?.timeline_steps && (
-            <div className="bg-slate-900/80 border border-cyan-800/40 rounded-xl p-5 backdrop-blur-md space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
-                <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg bg-cyan-950 border border-cyan-700/60 text-cyan-400">
-                    <FastForward className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                      Simulated Historical Degradation Replay
-                      <span className="text-[10px] font-mono font-normal px-2 py-0.5 rounded-full bg-slate-950 text-slate-400 border border-slate-800">
-                        Historical Simulation &bull; Never Live Aircraft Telemetry
-                      </span>
-                    </h3>
-                    <p className="text-xs text-slate-400">
-                      Scrub across historical operational cycles to observe progressive HPC degradation, sensor drift, and RUL decline.
-                    </p>
-                  </div>
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D1D9E0] dark:border-[#30363D]">
+                <div>
+                  <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                    Historical Degradation Replay
+                  </h3>
+                  <p className="text-[11px] text-[#656D76] dark:text-[#848D97]">
+                    Simulate chronological sensor degradation and RUL decline across historical flight cycles.
+                  </p>
                 </div>
 
-                {/* Player Controls */}
+                {/* Controls */}
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => {
@@ -227,10 +223,10 @@ export default function EngineDetails() {
                       }
                       setIsPlaying(!isPlaying);
                     }}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white transition-all ${
+                    className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium border transition-colors ${
                       isPlaying
-                        ? 'bg-amber-600 hover:bg-amber-500'
-                        : 'bg-cyan-600 hover:bg-cyan-500'
+                        ? 'bg-[#EFF2F5] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] border-[#D1D9E0] dark:border-[#30363D]'
+                        : 'bg-[#0969DA] text-white border-[#0969DA] hover:bg-[#0856b3]'
                     }`}
                   >
                     {isPlaying ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
@@ -242,36 +238,35 @@ export default function EngineDetails() {
                       setIsPlaying(false);
                       setReplayIndex(0);
                     }}
-                    className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300"
-                    title="Reset to Cycle 1"
+                    className="p-1 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
+                    title="Reset to initial cycle"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                   </button>
 
                   <button
                     onClick={() => setPlaybackSpeed((s) => (s === 1 ? 2 : s === 2 ? 4 : 1))}
-                    className="px-2 py-1 rounded bg-slate-800 text-slate-300 text-xs font-mono"
-                    title="Toggle Playback Speed"
+                    className="px-2 py-1 rounded-md border border-[#D1D9E0] dark:border-[#30363D] text-[11px] font-mono text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
                   >
                     {playbackSpeed}x
                   </button>
                 </div>
               </div>
 
-              {/* Dynamic Live Scrubber Bar */}
-              <div className="space-y-2">
+              {/* Scrubber slider */}
+              <div className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
-                  <span className="text-slate-400">
-                    Cycle Position: <strong className="text-cyan-400 font-mono">Cycle {currentReplayStep?.cycle || 1}</strong> of {engineDetail.last_cycle}
+                  <span className="text-[#656D76] dark:text-[#9198A1]">
+                    Cycle: <strong className="font-mono text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep?.cycle || 1}</strong> of {engineDetail.last_cycle}
                   </span>
-                  <div className="flex items-center gap-3">
-                    <span className="text-slate-400 text-xs">
-                      Replay Predicted RUL: <strong className="text-white font-mono">{currentReplayStep?.predicted_rul}c</strong>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[#656D76] dark:text-[#9198A1]">
+                      Predicted RUL: <strong className="font-mono text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep?.predicted_rul}c</strong>
                     </span>
                     {currentReplayStep && <EngineStatusBadge tier={currentReplayStep.urgency_tier} />}
                     {currentReplayStep?.is_anomalous && (
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-rose-950/80 border border-rose-700 text-rose-300">
-                        ANOMALY DETECTED (IForest: {currentReplayStep.anomaly_score})
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-mono border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30">
+                        Anomaly (Score: {currentReplayStep.anomaly_score})
                       </span>
                     )}
                   </div>
@@ -286,36 +281,36 @@ export default function EngineDetails() {
                     setIsPlaying(false);
                     setReplayIndex(parseInt(e.target.value, 10));
                   }}
-                  className="w-full accent-cyan-500 cursor-pointer"
+                  className="w-full accent-[#0969DA] cursor-pointer"
                 />
               </div>
 
-              {/* Dynamic Telemetry Snapshot at this cycle */}
+              {/* Telemetry Snapshot Tiles */}
               {currentReplayStep && (
-                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-2 text-center text-xs font-mono">
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">LPC Temp (s2)</div>
-                    <div className="text-rose-400 font-bold">{currentReplayStep.key_telemetry?.sensor_2_lpc_temp}°R</div>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 pt-1 text-center font-mono text-xs">
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">LPC Temp (s2)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_2_lpc_temp}°R</span>
                   </div>
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">HPC Temp (s3)</div>
-                    <div className="text-amber-400 font-bold">{currentReplayStep.key_telemetry?.sensor_3_hpc_temp}°R</div>
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">HPC Temp (s3)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_3_hpc_temp}°R</span>
                   </div>
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">LPT Temp (s4)</div>
-                    <div className="text-cyan-400 font-bold">{currentReplayStep.key_telemetry?.sensor_4_lpt_temp}°R</div>
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">LPT Temp (s4)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_4_lpt_temp}°R</span>
                   </div>
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Total HPC Pres (s7)</div>
-                    <div className="text-blue-400 font-bold">{currentReplayStep.key_telemetry?.sensor_7_hpc_pres} psia</div>
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">Total HPC Pres (s7)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_7_hpc_pres} psia</span>
                   </div>
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Static HPC Pres (s11)</div>
-                    <div className="text-indigo-400 font-bold">{currentReplayStep.key_telemetry?.sensor_11_static_pres} psia</div>
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">Static HPC Pres (s11)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_11_static_pres} psia</span>
                   </div>
-                  <div className="bg-slate-950/80 p-2 rounded border border-slate-800">
-                    <div className="text-[10px] text-slate-400">Fuel Flow (s12)</div>
-                    <div className="text-emerald-400 font-bold">{currentReplayStep.key_telemetry?.sensor_12_fuel_flow}</div>
+                  <div className="bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] p-2 rounded">
+                    <span className="text-[10px] text-[#848D97] block font-sans">Fuel Flow (s12)</span>
+                    <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">{currentReplayStep.key_telemetry?.sensor_12_fuel_flow}</span>
                   </div>
                 </div>
               )}
@@ -323,120 +318,123 @@ export default function EngineDetails() {
           )}
 
           {/* Maintenance Advisory Notice */}
-          <div className="bg-slate-900/70 border border-cyan-800/40 rounded-xl p-4 backdrop-blur-md">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-cyan-950/60 border border-cyan-700/50 text-cyan-400 shrink-0">
-                <Cpu className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-200">
-                  Engineering Decision-Support Advisory ({engineDetail.urgency_tier})
-                </h3>
-                <p className="mt-1 text-xs text-slate-300 leading-relaxed">
-                  {engineDetail.recommendation}
-                </p>
-                <div className="mt-3 flex items-center gap-3">
-                  <button
-                    onClick={() => navigate('/predictions', { state: { engineId, lastCycle: engineDetail.last_cycle } })}
-                    className="px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-medium transition-colors inline-flex items-center gap-1.5"
-                  >
-                    <Activity className="w-3.5 h-3.5" />
-                    Simulate Live Sensor Param Tuning
-                  </button>
-                  <button
-                    onClick={() => navigate('/maintenance')}
-                    className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition-colors"
-                  >
-                    View Fleet Maintenance Queue
-                  </button>
-                </div>
-              </div>
+          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                Decision-Support Maintenance Advisory ({engineDetail.urgency_tier})
+              </span>
+            </div>
+            <p className="text-xs text-[#656D76] dark:text-[#9198A1] leading-relaxed">
+              {engineDetail.recommendation}
+            </p>
+            <div className="pt-2 flex items-center gap-2">
+              <button
+                onClick={() => navigate('/predictions', { state: { engineId, lastCycle: engineDetail.last_cycle } })}
+                className="px-3 py-1.5 rounded-md bg-[#0969DA] text-white text-xs font-medium hover:bg-[#0856b3] transition-colors"
+              >
+                Simulate Parameters in Predictor
+              </button>
+              <button
+                onClick={() => navigate('/maintenance')}
+                className="px-3 py-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#1F2328] dark:text-[#E6EDF3] text-xs font-medium hover:bg-[#F6F8FA] dark:hover:bg-[#21262D] transition-colors"
+              >
+                View Maintenance Queue
+              </button>
             </div>
           </div>
 
-          {/* Interactive Degradation Sensor Charts */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          {/* Time Series Degradation Chart */}
+          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-[#D1D9E0] dark:border-[#30363D]">
               <div>
-                <h3 className="text-sm font-semibold text-white">Historical Sensor Degradation Curves</h3>
-                <p className="text-xs text-slate-400">
-                  Telemetry progression from Cycle 1 to Cycle {engineDetail.last_cycle}. Notice non-linear drift as HPC wear advances.
+                <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                  Sensor Degradation Telemetry
+                </h3>
+                <p className="text-[11px] text-[#656D76] dark:text-[#848D97]">
+                  Telemetry progression from Cycle 1 to Cycle {engineDetail.last_cycle}.
                 </p>
               </div>
 
-              {/* Chart Tabs */}
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              {/* Group tabs */}
+              <div className="inline-flex rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-[#F6F8FA] dark:bg-[#0D1117] p-0.5 text-xs">
                 <button
-                  onClick={() => setActiveChartGroup('temp')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    activeChartGroup === 'temp'
-                      ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => setActiveSensorGroup('temp')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
+                    activeSensorGroup === 'temp'
+                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
+                      : 'text-[#656D76] dark:text-[#9198A1]'
                   }`}
                 >
-                  <Thermometer className="w-3 h-3" /> Temperatures
+                  Temperatures
                 </button>
                 <button
-                  onClick={() => setActiveChartGroup('pressure')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    activeChartGroup === 'pressure'
-                      ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => setActiveSensorGroup('pressure')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
+                    activeSensorGroup === 'pressure'
+                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
+                      : 'text-[#656D76] dark:text-[#9198A1]'
                   }`}
                 >
-                  <Gauge className="w-3 h-3" /> Pressures
+                  Pressures
                 </button>
                 <button
-                  onClick={() => setActiveChartGroup('dynamics')}
-                  className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium transition-colors ${
-                    activeChartGroup === 'dynamics'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
-                      : 'text-slate-400 hover:text-slate-200'
+                  onClick={() => setActiveSensorGroup('dynamics')}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
+                    activeSensorGroup === 'dynamics'
+                      ? 'bg-white dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold shadow-xs'
+                      : 'text-[#656D76] dark:text-[#9198A1]'
                   }`}
                 >
-                  <Wind className="w-3 h-3" /> Speed & Flow
+                  Speed & Flow
                 </button>
               </div>
             </div>
 
-            {/* Recharts Container */}
+            {/* Recharts with disciplined neutral styling */}
             <div className="h-80 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={engineDetail.telemetry_history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <CartesianGrid strokeDasharray="2 2" stroke="#EAEEF2" className="dark:stroke-[#21262D]" />
                   <XAxis
                     dataKey="cycle"
-                    stroke="#64748b"
+                    stroke="#848D97"
                     fontSize={11}
                     tickLine={false}
-                    label={{ value: 'Flight Cycle', position: 'insideBottom', offset: -4, fill: '#64748b', fontSize: 11 }}
+                    label={{ value: 'Flight Cycle', position: 'insideBottom', offset: -4, fill: '#848D97', fontSize: 11 }}
                   />
-                  <YAxis stroke="#64748b" fontSize={11} tickLine={false} domain={['auto', 'auto']} />
+                  <YAxis stroke="#848D97" fontSize={11} tickLine={false} domain={['auto', 'auto']} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '11px' }}
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#D1D9E0',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      color: '#1F2328',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    }}
                   />
                   <Legend wrapperStyle={{ fontSize: '11px', paddingTop: '10px' }} />
 
-                  {activeChartGroup === 'temp' && (
+                  {activeSensorGroup === 'temp' && (
                     <>
-                      <Line type="monotone" dataKey="sensor_2" name="LPC Outlet Temp (s2, °R)" stroke="#f43f5e" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_3" name="HPC Outlet Temp (s3, °R)" stroke="#f59e0b" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_4" name="LPT Outlet Temp (s4, °R)" stroke="#06b6d4" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_2" name="LPC Outlet Temp (s2, °R)" stroke="#CF222E" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_3" name="HPC Outlet Temp (s3, °R)" stroke="#9A6700" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_4" name="LPT Outlet Temp (s4, °R)" stroke="#0969DA" dot={false} strokeWidth={1.5} />
                     </>
                   )}
 
-                  {activeChartGroup === 'pressure' && (
+                  {activeSensorGroup === 'pressure' && (
                     <>
-                      <Line type="monotone" dataKey="sensor_7" name="Total HPC Pressure (s7, psia)" stroke="#38bdf8" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_11" name="Static HPC Pressure (s11, psia)" stroke="#818cf8" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_7" name="Total HPC Pressure (s7, psia)" stroke="#0969DA" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_11" name="Static HPC Pressure (s11, psia)" stroke="#8250DF" dot={false} strokeWidth={1.5} />
                     </>
                   )}
 
-                  {activeChartGroup === 'dynamics' && (
+                  {activeSensorGroup === 'dynamics' && (
                     <>
-                      <Line type="monotone" dataKey="sensor_8" name="Fan Speed (s8, rpm)" stroke="#34d399" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_12" name="Fuel Flow Ratio (s12)" stroke="#e879f9" dot={false} strokeWidth={1.5} />
-                      <Line type="monotone" dataKey="sensor_15" name="Bypass Ratio (s15)" stroke="#fbbf24" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_8" name="Fan Speed (s8, rpm)" stroke="#1A7F37" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_12" name="Fuel Flow Ratio (s12)" stroke="#9A6700" dot={false} strokeWidth={1.5} />
+                      <Line type="monotone" dataKey="sensor_15" name="Bypass Ratio (s15)" stroke="#656D76" dot={false} strokeWidth={1.5} />
                     </>
                   )}
                 </LineChart>

@@ -9,7 +9,7 @@ import {
   CartesianGrid,
   Cell,
 } from 'recharts';
-import { BarChart2, ShieldCheck, Database, Award, Info, GitBranch } from 'lucide-react';
+import { BarChart2, ShieldCheck, Database, CheckCircle2, FileText, Info } from 'lucide-react';
 import api from '../services/api';
 import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
 
@@ -24,7 +24,6 @@ export default function ModelAnalytics() {
       .finally(() => setLoading(false));
   }, []);
 
-  // Format feature importances for Recharts
   const featureData = metadata?.feature_importances
     ? Object.entries(metadata.feature_importances).map(([name, val]) => ({
         name,
@@ -33,129 +32,139 @@ export default function ModelAnalytics() {
     : [];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <DisclaimerBanner />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <BarChart2 className="w-6 h-6 text-cyan-400" />
+          <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
             Model Transparency & NASA Benchmark Performance
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Methodology, feature importance weights, engine-wise validation metrics, and official test split evaluations.
+          <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
+            Architectural specifications, zero-leakage cross-validation, and official NASA C-MAPSS FD001 test metrics
           </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="p-16 text-center text-slate-400 text-xs">Loading metadata...</div>
+        <div className="p-16 text-center text-xs text-[#656D76]">Loading model registry metadata...</div>
       ) : metadata ? (
         <>
-          {/* Key Metric Highlights */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 uppercase font-medium">Model Architecture</span>
-              <div className="mt-2 text-lg font-bold text-white font-mono">
+          {/* Key Metric Highlights (Enterprise Stat Panels) */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                Model Architecture
+              </span>
+              <div className="mt-1 text-base font-mono font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
                 {metadata.model_name}
               </div>
-              <span className="text-[11px] text-slate-400">120 Estimators, max_depth=16</span>
+              <span className="text-[10px] text-[#848D97]">120 trees &bull; max_depth=16</span>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 uppercase font-medium">5-Fold GroupKFold MAE</span>
-              <div className="mt-2 text-2xl font-bold text-cyan-400 font-mono">
-                {metadata.cv_validation_metrics?.mean_mae_cycles} <span className="text-xs text-slate-400 font-normal">cycles</span>
-              </div>
-              <span className="text-[11px] text-slate-400">
-                Engine-wise zero-leakage cross-validation
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                5-Fold GroupKFold MAE
               </span>
-            </div>
-
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 uppercase font-medium">NASA Official Test MAE</span>
-              <div className="mt-2 text-2xl font-bold text-emerald-400 font-mono">
-                {metadata.nasa_test_metrics?.test_mae_cycles} <span className="text-xs text-slate-400 font-normal">cycles</span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#0969DA] dark:text-[#4493F8]">
+                {metadata.cv_validation_metrics?.mean_mae_cycles}{' '}
+                <span className="text-xs font-normal text-[#848D97]">cycles</span>
               </div>
-              <span className="text-[11px] text-slate-400">100 Test engines (RUL_FD001 target)</span>
+              <span className="text-[10px] text-[#848D97]">Engine-wise zero-leakage CV</span>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4">
-              <span className="text-xs text-slate-400 uppercase font-medium">NASA Test RMSE / R²</span>
-              <div className="mt-2 text-2xl font-bold text-white font-mono">
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                NASA Test Set MAE
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1A7F37] dark:text-[#3FB950]">
+                {metadata.nasa_test_metrics?.test_mae_cycles}{' '}
+                <span className="text-xs font-normal text-[#848D97]">cycles</span>
+              </div>
+              <span className="text-[10px] text-[#848D97]">100 test engines (RUL_FD001)</span>
+            </div>
+
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
+              <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                NASA Test RMSE / R²
+              </span>
+              <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
                 {metadata.nasa_test_metrics?.test_rmse_cycles}c{' '}
-                <span className="text-xs font-normal text-slate-400">
+                <span className="text-xs font-normal text-[#848D97]">
                   (R² {metadata.nasa_test_metrics?.test_r2})
                 </span>
               </div>
-              <span className="text-[11px] text-slate-400">Asymmetric penalty: {metadata.nasa_test_metrics?.nasa_score}</span>
+              <span className="text-[10px] text-[#848D97]">Asymmetric Penalty: {metadata.nasa_test_metrics?.nasa_score}</span>
             </div>
           </div>
 
-          {/* Feature Importance Chart */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md space-y-3">
+          {/* Feature Importance Bar Chart */}
+          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-3">
             <div>
-              <h3 className="text-sm font-semibold text-white">Feature Importance Weights (%)</h3>
-              <p className="text-xs text-slate-400">
-                Gini impurity reduction across 120 decision trees. Shows which thermodynamic measurements drive RUL degradation estimation.
+              <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                Random Forest Feature Importance Weights (%)
+              </h3>
+              <p className="text-[11px] text-[#656D76] dark:text-[#848D97]">
+                Normalized Gini impurity reduction across 120 decision trees. Reflects relative prognostic influence of each sensor channel.
               </p>
             </div>
 
             <div className="h-72 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={featureData} margin={{ top: 10, right: 10, left: 0, bottom: 25 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <CartesianGrid strokeDasharray="2 2" stroke="#EAEEF2" className="dark:stroke-[#21262D]" />
                   <XAxis
                     dataKey="name"
-                    stroke="#64748b"
+                    stroke="#848D97"
                     fontSize={10}
                     interval={0}
                     angle={-45}
                     textAnchor="end"
                   />
-                  <YAxis stroke="#64748b" fontSize={11} tickFormatter={(val) => `${val}%`} />
+                  <YAxis stroke="#848D97" fontSize={11} tickFormatter={(v) => `${v}%`} />
                   <Tooltip
-                    formatter={(val) => [`${val}%`, 'Relative Importance']}
-                    contentStyle={{ backgroundColor: '#020617', borderColor: '#334155', borderRadius: '0.5rem', fontSize: '11px' }}
+                    formatter={(v) => [`${v}%`, 'Relative Importance']}
+                    contentStyle={{
+                      backgroundColor: '#FFFFFF',
+                      borderColor: '#D1D9E0',
+                      borderRadius: '6px',
+                      fontSize: '11px',
+                      color: '#1F2328',
+                    }}
                   />
-                  <Bar dataKey="importance" fill="#06b6d4" radius={[4, 4, 0, 0]}>
-                    {featureData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={index < 3 ? '#38bdf8' : index < 7 ? '#0284c7' : '#0369a1'}
-                      />
-                    ))}
-                  </Bar>
+                  <Bar dataKey="importance" fill="#0969DA" radius={[2, 2, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {/* Methodology & Reproducibility Documentation */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md space-y-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                <Database className="w-4 h-4 text-cyan-400" />
-                NASA C-MAPSS FD001 Dataset Profile
-              </div>
-              <ul className="text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>&bull; <strong className="text-white">Fleet Size:</strong> 100 training engines (run to failure) and 100 test engines (truncated).</li>
-                <li>&bull; <strong className="text-white">Operating Regime:</strong> Sea-level ambient condition (1 flight regime).</li>
-                <li>&bull; <strong className="text-white">Fault Mode:</strong> High-Pressure Compressor (HPC) stage blade wear and thermal degradation.</li>
-                <li>&bull; <strong className="text-white">Constant Sensor Exclusion:</strong> 6 flat sensors (1, 5, 10, 16, 18, 19) dropped due to zero operational variance.</li>
+          {/* Model Configuration & Zero Leakage Protocol */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-2.5">
+              <h4 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3] flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-[#0969DA]" />
+                Dataset & Operating Profile
+              </h4>
+              <ul className="text-xs text-[#656D76] dark:text-[#9198A1] space-y-1.5 leading-relaxed font-sans">
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Benchmark:</strong> NASA C-MAPSS FD001 (Commercial Modular Aero-Propulsion System Simulation).</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Training Fleet:</strong> 100 run-to-failure engines (20,631 records).</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Test Fleet:</strong> 100 truncated trajectory engines (13,096 records).</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Fault Mode:</strong> High-Pressure Compressor (HPC) stage degradation.</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Constant Sensor Exclusion:</strong> 6 flat sensors (`sensor_1, 5, 10, 16, 18, 19`) dropped due to zero operational variance.</li>
               </ul>
             </div>
 
-            <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md space-y-3">
-              <div className="flex items-center gap-2 text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+            <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-2.5">
+              <h4 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3] flex items-center gap-1.5">
+                <ShieldCheck className="w-3.5 h-3.5 text-[#1A7F37]" />
                 Zero Data Leakage Protocol
-              </div>
-              <ul className="text-xs text-slate-300 space-y-2 leading-relaxed">
-                <li>&bull; <strong className="text-white">Engine-Wise Grouping:</strong> Cross-validation splits by engine unit ID. Telemetry from the same engine never spans train and validation splits.</li>
-                <li>&bull; <strong className="text-white">Identity Exclusion:</strong> Raw engine ID is an identifier, not a sensor feature, and is excluded from model inputs.</li>
-                <li>&bull; <strong className="text-white">Blind Test Evaluation:</strong> Ground truth `RUL_FD001.txt` is strictly quarantined for post-hoc testing, never used during training or hyperparameter tuning.</li>
-                <li>&bull; <strong className="text-white">Capped RUL Target:</strong> Piecewise linear upper bound of 125 cycles adheres to standard prognostics literature.</li>
+              </h4>
+              <ul className="text-xs text-[#656D76] dark:text-[#9198A1] space-y-1.5 leading-relaxed font-sans">
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Engine-Wise Grouping:</strong> Cross-validation splits strictly by `engine_id` using `GroupKFold`. An engine's cycles never span train and test folds.</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Identity Feature Omission:</strong> Raw unit ID is an identifier, not a physical sensor feature, and is excluded from training.</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Blind Test Isolation:</strong> Ground truth `RUL_FD001.txt` is quarantined exclusively for terminal evaluation.</li>
+                <li>&bull; <strong className="text-[#1F2328] dark:text-[#E6EDF3]">Explainability:</strong> Global Gini feature weights shown above. Local SHAP tree attribution is scheduled for future extension.</li>
               </ul>
             </div>
           </div>

@@ -1,30 +1,18 @@
 import React from 'react';
 
-export default function MetricCard({ title, value, subtitle, icon: Icon, color = 'cyan' }) {
-  const colorMap = {
-    rose: 'border-rose-500/30 bg-rose-950/20 text-rose-400',
-    amber: 'border-amber-500/30 bg-amber-950/20 text-amber-400',
-    cyan: 'border-cyan-500/30 bg-cyan-950/20 text-cyan-400',
-    emerald: 'border-emerald-500/30 bg-emerald-950/20 text-emerald-400',
-    indigo: 'border-indigo-500/30 bg-indigo-950/20 text-indigo-400',
-  };
-
-  const badgeClass = colorMap[color] || colorMap.cyan;
-
+export default function MetricCard({ title, value, subtitle, badge }) {
   return (
-    <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md hover:border-slate-700 transition-all">
+    <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 transition-colors">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-slate-400 tracking-wide uppercase">{title}</span>
-        {Icon && (
-          <div className={`p-2 rounded-lg border ${badgeClass}`}>
-            <Icon className="w-4 h-4" />
-          </div>
-        )}
+        <span className="text-xs font-medium text-[#656D76] dark:text-[#9198A1]">{title}</span>
+        {badge}
       </div>
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-2xl font-bold tracking-tight text-white">{value}</span>
+      <div className="mt-2 text-2xl font-semibold tabular-nums text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
+        {value}
       </div>
-      {subtitle && <p className="mt-1 text-xs text-slate-400">{subtitle}</p>}
+      {subtitle && (
+        <p className="mt-1 text-[11px] text-[#656D76] dark:text-[#848D97]">{subtitle}</p>
+      )}
     </div>
   );
 }

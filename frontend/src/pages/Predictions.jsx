@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Cpu, Send, RefreshCw, CheckCircle, Clock, AlertTriangle, ArrowRight, ShieldAlert, BarChart } from 'lucide-react';
+import { Cpu, Send, RefreshCw, CheckCircle, Clock, AlertTriangle, ArrowRight, ShieldCheck, BarChart } from 'lucide-react';
 import api from '../services/api';
 import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
 import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
@@ -116,27 +116,27 @@ export default function Predictions() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <DisclaimerBanner />
 
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
-            <Cpu className="w-6 h-6 text-cyan-400" />
-            Live Machine-Learning RUL Predictor & Anomaly Detector
+          <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
+            Remaining Useful Life Prediction
           </h1>
-          <p className="text-xs text-slate-400 mt-1">
-            Simulate turbofan operational cycles, trigger RandomForest RUL inference, and inspect Isolation Forest anomaly scores.
+          <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
+            Technical inference workspace &bull; Random Forest model with Isolation Forest anomaly verification
           </p>
         </div>
 
         {/* Engine Loader */}
-        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-2 rounded-xl">
-          <span className="text-xs text-slate-400">Load Engine State:</span>
+        <div className="flex items-center gap-2">
+          <label className="text-xs text-[#656D76] dark:text-[#9198A1]">Load Engine State:</label>
           <select
             value={engineId}
             onChange={(e) => setEngineId(e.target.value)}
-            className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded-lg px-2.5 py-1 font-mono focus:outline-none focus:border-cyan-500"
+            className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] text-[#1F2328] dark:text-[#E6EDF3] text-xs rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:border-[#0969DA]"
           >
             {Array.from({ length: 100 }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
@@ -146,194 +146,192 @@ export default function Predictions() {
           </select>
           <button
             onClick={() => loadEngineTelemetry(engineId)}
-            className="p-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300"
-            title="Reload engine telemetry"
+            className="p-1.5 rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] text-[#656D76] dark:text-[#9198A1] hover:bg-[#F6F8FA]"
+            title="Reload engine state"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loadingDefaults ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Column (2 spans) */}
-        <div className="lg:col-span-2 bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        {/* Telemetry Input Form (2 cols) */}
+        <div className="lg:col-span-2 bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-4">
           <form onSubmit={handleRunInference} className="space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
-              <span className="text-xs font-semibold text-slate-200 uppercase tracking-wider">
-                Telemetry Inputs (Engine ENG-{String(engineId).padStart(3, '0')})
+            <div className="flex items-center justify-between pb-2 border-b border-[#D1D9E0] dark:border-[#30363D]">
+              <span className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                Telemetry Inputs (ENG-{String(engineId).padStart(3, '0')})
               </span>
-              <span className="text-[11px] text-slate-400">
-                19 Features verified against training schema
-              </span>
+              <span className="text-[11px] font-mono text-[#848D97]">19 schema features</span>
             </div>
 
             {/* Operating Condition Settings */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">
-                Operating Settings & Cycle
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
+                Operational Flight Settings
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
-                  <label className="text-[11px] text-slate-400">Cycle Count</label>
+                  <label className="text-[10px] text-[#848D97] block">Flight Cycle</label>
                   <input
                     type="number"
                     value={formData.cycle}
                     onChange={(e) => handleInputChange('cycle', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">Setting 1 (Altitude)</label>
+                  <label className="text-[10px] text-[#848D97] block">Setting 1 (Altitude)</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={formData.setting_1}
                     onChange={(e) => handleInputChange('setting_1', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">Setting 2 (Mach)</label>
+                  <label className="text-[10px] text-[#848D97] block">Setting 2 (Mach)</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={formData.setting_2}
                     onChange={(e) => handleInputChange('setting_2', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">Setting 3 (TRA)</label>
+                  <label className="text-[10px] text-[#848D97] block">Setting 3 (TRA)</label>
                   <input
                     type="number"
                     step="0.1"
                     value={formData.setting_3}
                     onChange={(e) => handleInputChange('setting_3', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Temperature Sensors */}
-            <div className="space-y-2 pt-2">
-              <span className="text-[11px] font-semibold text-rose-400 uppercase tracking-wider">
-                Thermal Telemetry (°R)
+            {/* Temperatures */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
+                Gas Path Temperatures (°R)
               </span>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-3 gap-2.5">
                 <div>
-                  <label className="text-[11px] text-slate-400">s2 (LPC Outlet Temp)</label>
+                  <label className="text-[10px] text-[#848D97] block">s2 (LPC Outlet Temp)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_2}
                     onChange={(e) => handleInputChange('sensor_2', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s3 (HPC Outlet Temp)</label>
+                  <label className="text-[10px] text-[#848D97] block">s3 (HPC Outlet Temp)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_3}
                     onChange={(e) => handleInputChange('sensor_3', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s4 (LPT Outlet Temp)</label>
+                  <label className="text-[10px] text-[#848D97] block">s4 (LPT Outlet Temp)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_4}
                     onChange={(e) => handleInputChange('sensor_4', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Pressure Sensors */}
-            <div className="space-y-2 pt-2">
-              <span className="text-[11px] font-semibold text-cyan-400 uppercase tracking-wider">
-                Pressure Telemetry (psia)
+            {/* Pressures */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
+                Compressor Pressures (psia)
               </span>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="text-[11px] text-slate-400">s7 (Total HPC Outlet Pressure)</label>
+                  <label className="text-[10px] text-[#848D97] block">s7 (Total HPC Pressure)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_7}
                     onChange={(e) => handleInputChange('sensor_7', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s11 (Static HPC Pressure)</label>
+                  <label className="text-[10px] text-[#848D97] block">s11 (Static HPC Pressure)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_11}
                     onChange={(e) => handleInputChange('sensor_11', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
-            {/* Speeds & Fluid Ratios */}
-            <div className="space-y-2 pt-2">
-              <span className="text-[11px] font-semibold text-amber-400 uppercase tracking-wider">
-                Rotor Speeds & Fluid Dynamics
+            {/* Speeds & Dynamics */}
+            <div className="space-y-1.5 pt-1">
+              <span className="text-[11px] font-medium text-[#656D76] dark:text-[#9198A1]">
+                Rotor Speeds & Fluid Ratios
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                 <div>
-                  <label className="text-[11px] text-slate-400">s8 (Fan Speed, rpm)</label>
+                  <label className="text-[10px] text-[#848D97] block">s8 (Fan Speed, rpm)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_8}
                     onChange={(e) => handleInputChange('sensor_8', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s9 (Core Speed, rpm)</label>
+                  <label className="text-[10px] text-[#848D97] block">s9 (Core Speed, rpm)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_9}
                     onChange={(e) => handleInputChange('sensor_9', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s12 (Fuel Flow Ratio)</label>
+                  <label className="text-[10px] text-[#848D97] block">s12 (Fuel Flow Ratio)</label>
                   <input
                     type="number"
                     step="0.01"
                     value={formData.sensor_12}
                     onChange={(e) => handleInputChange('sensor_12', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label className="text-[11px] text-slate-400">s15 (Bypass Ratio)</label>
+                  <label className="text-[10px] text-[#848D97] block">s15 (Bypass Ratio)</label>
                   <input
                     type="number"
                     step="0.0001"
                     value={formData.sensor_15}
                     onChange={(e) => handleInputChange('sensor_15', e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded p-1.5 text-xs text-white font-mono focus:border-cyan-500"
+                    className="w-full bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-2.5 py-1 text-xs font-mono text-[#1F2328] dark:text-[#E6EDF3] focus:border-[#0969DA] focus:outline-none"
                   />
                 </div>
               </div>
             </div>
 
             {error && (
-              <div className="p-3 bg-rose-950/40 border border-rose-800 rounded-lg text-rose-300 text-xs">
+              <div className="p-2.5 border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30 rounded text-xs">
                 {error}
               </div>
             )}
@@ -341,72 +339,66 @@ export default function Predictions() {
             <button
               type="submit"
               disabled={submitting}
-              className="w-full mt-4 py-2.5 px-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-lg font-medium text-xs shadow-lg shadow-cyan-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              className="w-full py-2 px-3 rounded-md bg-[#0969DA] text-white text-xs font-medium hover:bg-[#0856b3] disabled:opacity-50 transition-colors"
             >
-              {submitting ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Executing RandomForest Pipeline & Anomaly Detector...
-                </>
-              ) : (
-                <>
-                  <Send className="w-3.5 h-3.5" />
-                  Run Real-Time ML Inference
-                </>
-              )}
+              {submitting ? 'Executing Inference Pipeline...' : 'Run Real-Time ML Inference'}
             </button>
           </form>
         </div>
 
-        {/* Prediction Output Result Card */}
-        <div className="space-y-6">
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-5 backdrop-blur-md">
-            <h3 className="text-xs font-semibold text-slate-200 uppercase tracking-wider pb-3 border-b border-slate-800">
-              Live Model Output
+        {/* Prediction Results Panel (1 col) */}
+        <div className="space-y-4">
+          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-4">
+            <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3] pb-2 border-b border-[#D1D9E0] dark:border-[#30363D]">
+              Model Output Result
             </h3>
 
             {predictionResult ? (
-              <div className="mt-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-slate-400">Target Engine:</span>
-                  <span className="font-mono font-bold text-cyan-300">
-                    ENG-{String(predictionResult.engine_id).padStart(3, '0')} (Cycle {predictionResult.cycle})
+              <div className="space-y-3.5">
+                <div className="flex justify-between items-center text-xs">
+                  <span className="text-[#656D76] dark:text-[#9198A1]">Engine / Cycle:</span>
+                  <span className="font-mono font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+                    ENG-{String(predictionResult.engine_id).padStart(3, '0')} (c{predictionResult.cycle})
                   </span>
                 </div>
 
-                <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 text-center">
-                  <span className="text-xs text-slate-400 font-medium">Estimated Remaining Useful Life</span>
-                  <div className="mt-2 text-4xl font-extrabold font-mono text-white tracking-tight">
+                {/* Main RUL Display */}
+                <div className="p-3.5 bg-[#F6F8FA] dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md text-center">
+                  <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
+                    Estimated Remaining Useful Life
+                  </span>
+                  <div className="mt-1 text-3xl font-bold font-mono tabular-nums text-[#1F2328] dark:text-[#E6EDF3]">
                     {predictionResult.predicted_rul_cycles}{' '}
-                    <span className="text-sm font-normal text-slate-400">cycles</span>
+                    <span className="text-xs font-normal text-[#848D97]">cycles</span>
                   </div>
-                  <div className="mt-3 flex items-center justify-center gap-2">
-                    <EngineStatusBadge tier={predictionResult.urgency_tier} size="lg" />
+                  <div className="mt-2.5 flex items-center justify-center gap-2">
+                    <EngineStatusBadge tier={predictionResult.urgency_tier} size="md" />
                     {predictionResult.is_anomalous ? (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-mono font-semibold bg-rose-950/80 border border-rose-600 text-rose-300">
-                        ANOMALOUS (Score: {predictionResult.anomaly_score})
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono border border-[#CF222E]/40 text-[#CF222E] bg-[#FFEBE9] dark:bg-[#490202]/30">
+                        Anomaly ({predictionResult.anomaly_score})
                       </span>
                     ) : (
-                      <span className="px-2.5 py-1 rounded-full text-xs font-mono bg-emerald-950/60 border border-emerald-600/40 text-emerald-300">
-                        Nominal Bounds (Score: {predictionResult.anomaly_score})
+                      <span className="px-2 py-0.5 rounded text-[11px] font-mono border border-[#1A7F37]/40 text-[#1A7F37] bg-[#DAFBE1] dark:bg-[#043310]/30">
+                        Nominal ({predictionResult.anomaly_score})
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* Local Feature Attribution / Sensor Drift Explanations */}
+                {/* Sensor Drift Attribution */}
                 {predictionResult.top_sensor_drifts?.length > 0 && (
-                  <div className="p-3 bg-slate-950/90 rounded-lg border border-slate-800 space-y-2">
-                    <div className="text-[11px] font-semibold text-cyan-300 flex items-center gap-1.5">
-                      <BarChart className="w-3.5 h-3.5" />
-                      Top Sensor Degradation Drift Drivers (vs Baseline):
-                    </div>
-                    <div className="space-y-1.5 text-[11px] font-mono">
+                  <div className="border border-[#D1D9E0] dark:border-[#30363D] rounded-md p-2.5 space-y-1.5 bg-[#F6F8FA] dark:bg-[#0D1117]">
+                    <span className="text-[10px] font-semibold text-[#656D76] dark:text-[#9198A1] uppercase font-mono block">
+                      Sensor Drift Drivers (vs Baseline)
+                    </span>
+                    <div className="space-y-1 font-mono text-[11px]">
                       {predictionResult.top_sensor_drifts.map((d) => (
-                        <div key={d.feature} className="flex items-center justify-between text-slate-300 bg-slate-900/60 p-1.5 rounded">
-                          <span className="font-sans text-slate-200">{d.description}</span>
-                          <span className={d.z_score > 1.5 ? 'text-rose-400' : d.z_score < -1.5 ? 'text-cyan-400' : 'text-slate-300'}>
-                            {d.z_score > 0 ? `+${d.z_score}` : d.z_score}σ ({d.delta > 0 ? `+${d.delta}` : d.delta})
+                        <div key={d.feature} className="flex justify-between items-center text-xs">
+                          <span className="text-[#1F2328] dark:text-[#E6EDF3] font-sans text-[11px]">
+                            {d.description}
+                          </span>
+                          <span className={d.z_score > 1.5 ? 'text-[#CF222E]' : d.z_score < -1.5 ? 'text-[#0969DA]' : 'text-[#656D76]'}>
+                            {d.z_score > 0 ? `+${d.z_score}` : d.z_score}σ
                           </span>
                         </div>
                       ))}
@@ -414,51 +406,42 @@ export default function Predictions() {
                   </div>
                 )}
 
-                <div className="text-xs space-y-1 text-slate-300 bg-slate-950/60 p-3 rounded-lg border border-slate-800">
-                  <div className="font-semibold text-slate-200">Recommended Action:</div>
-                  <p className="text-slate-300 leading-relaxed text-[11px]">
+                {/* Recommended Protocol */}
+                <div className="text-xs text-[#656D76] dark:text-[#9198A1] border-t border-[#D1D9E0] dark:border-[#30363D] pt-2.5 space-y-1">
+                  <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3] block">
+                    Maintenance Recommendation:
+                  </span>
+                  <p className="text-[11px] leading-relaxed">
                     {predictionResult.recommendation}
                   </p>
                 </div>
-
-                <div className="pt-2 border-t border-slate-800 text-[10px] text-slate-400 space-y-1 font-mono">
-                  <div>Model Version: {predictionResult.model_version}</div>
-                  <div>Raw Unclamped RUL: {predictionResult.raw_rul_cycles} cycles</div>
-                  <div>Inference Timestamp: {predictionResult.evaluated_at}</div>
-                </div>
               </div>
             ) : (
-              <div className="p-10 text-center text-slate-400 text-xs">
-                Fill the telemetry parameters or choose an engine, then click "Run Real-Time ML Inference" to compute RUL.
+              <div className="p-8 text-center text-xs text-[#848D97]">
+                Submit telemetry parameters to run live model inference.
               </div>
             )}
           </div>
 
-          {/* Audit History Card */}
-          <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-4 backdrop-blur-md">
-            <h4 className="text-xs font-semibold text-slate-300 uppercase tracking-wider mb-3">
-              Recent Inferences (SQLite Audit Trail)
+          {/* SQLite Audit Trail */}
+          <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5 space-y-2.5">
+            <h4 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
+              Audit Log (Recent Predictions)
             </h4>
-            <div className="space-y-2">
+            <div className="space-y-1.5 font-mono text-xs">
               {predictionHistory.slice(0, 4).map((rec) => (
                 <div
                   key={rec.id}
-                  className="p-2.5 bg-slate-950 rounded-lg border border-slate-800 flex items-center justify-between text-xs"
+                  className="p-2 rounded border border-[#EAEEF2] dark:border-[#21262D] bg-[#F6F8FA] dark:bg-[#0D1117] flex justify-between items-center"
                 >
                   <div>
-                    <span className="font-mono font-medium text-cyan-300">
+                    <span className="font-semibold text-[#0969DA] dark:text-[#4493F8]">
                       ENG-{String(rec.engine_id).padStart(3, '0')}
                     </span>{' '}
-                    <span className="text-slate-400">(c{rec.cycle})</span>
-                    <div className="text-[10px] text-slate-400 font-mono">
-                      {rec.created_at ? new Date(rec.created_at).toLocaleTimeString() : ''}
-                    </div>
+                    <span className="text-[#848D97]">(c{rec.cycle})</span>
                   </div>
                   <div className="text-right">
-                    <span className="font-mono font-bold text-white">{rec.predicted_rul}c</span>
-                    <div>
-                      <EngineStatusBadge tier={rec.urgency_tier} />
-                    </div>
+                    <span className="font-bold text-[#1F2328] dark:text-[#E6EDF3]">{rec.predicted_rul}c</span>
                   </div>
                 </div>
               ))}

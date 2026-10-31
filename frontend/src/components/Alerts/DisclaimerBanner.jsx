@@ -1,17 +1,14 @@
 import React from 'react';
-import { AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Info } from 'lucide-react';
 
 export default function DisclaimerBanner() {
   return (
-    <div className="bg-amber-950/40 border border-amber-600/30 rounded-lg p-3 text-xs text-amber-200/90 flex items-start gap-2.5 backdrop-blur-sm mb-6">
-      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-      <div>
-        <span className="font-semibold text-amber-300">DEMO & RESEARCH PROTOTYPE ONLY:</span>
-        <span className="ml-1 text-slate-300">
-          This system uses the NASA C-MAPSS FD001 synthetic turbofan degradation dataset. RUL values and priority tiers are experimental decision-support estimates.
-          They do <strong className="text-amber-200 underline decoration-amber-500/50">not</strong> certify aircraft airworthiness, diagnose real flight systems, or authorize maintenance without qualified human engineering review.
-        </span>
-      </div>
+    <div className="bg-[#F6F8FA] dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-md px-3.5 py-2 text-xs text-[#656D76] dark:text-[#9198A1] flex items-center gap-2.5 mb-5">
+      <Info className="w-4 h-4 text-[#0969DA] dark:text-[#4493F8] shrink-0" />
+      <span className="leading-relaxed">
+        <strong className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">Research prototype</strong> using NASA C-MAPSS FD001 benchmark data.
+        RUL estimates and risk classifications are experimental decision-support outputs and do not certify airworthiness or authorize maintenance.
+      </span>
     </div>
   );
 }
