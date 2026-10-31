@@ -2,7 +2,7 @@
   "model_name": "RandomForestRegressor_FD001",
   "version": "1.0.0",
   "dataset": "NASA C-MAPSS FD001",
-  "training_date": "2026-10-31T09:02:11.931525+00:00",
+  "training_date": "2026-10-31T12:02:44.907754+00:00",
   "random_state": 42,
   "n_estimators": 120,
   "target_convention": "Piecewise-linear RUL capped at 125 cycles",

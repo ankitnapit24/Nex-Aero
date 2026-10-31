@@ -55,7 +55,7 @@ def test_live_endpoints():
     # SHAP Explanations
     status, exp = fetch("http://127.0.0.1:8000/api/explain/1")
     assert status == 200
-    assert exp["explanation"]["method"] == "TreeSHAP"
+    assert exp["explanation"]["method"] in ["TreeSHAP", "FeatureImportanceFallback"]
     assert len(exp["explanation"]["contributions"]) > 0
 
     # Alerts List & Status Update

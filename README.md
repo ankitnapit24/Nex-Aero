@@ -32,7 +32,7 @@ flowchart LR
 - **Unsupervised Anomaly Surveillance:** `IsolationForest` trained on 3,000 nominal early cycles across strictly physical sensors (excluding cycle, engine ID, and RUL to eliminate age bias).
 - **Model Explainability:** Exact game-theoretic `TreeSHAP` local feature attributions and global Gini feature importance rankings.
 - **Workflow & Persistence:** FastAPI REST API with SQLite database supporting audit logging and persistent maintenance triage alerts (`OPEN` -> `ACKNOWLEDGED` -> `RESOLVED`).
-- **Enterprise Design System:** GitHub/Linear-inspired neutral theme supporting light/dark modes with accessible typography, compact tables, and responsive cards.
+- **Enterprise Design System:** GitHub/Linear-inspired neutral theme supporting persistent light/dark modes and English/Hindi language selection, with accessible typography, compact tables, and responsive cards.
 
 ---
 

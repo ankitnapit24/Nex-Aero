@@ -1,403 +1,187 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { ArrowDownRight, ArrowRight, ArrowUpRight, ChevronRight } from 'lucide-react';
 import {
-  Search,
-  ArrowUpDown,
-  ChevronRight,
-  ChevronLeft,
-  Activity,
-  Layers,
-  Filter,
-  CheckCircle2,
-  AlertTriangle,
-} from 'lucide-react';
-import api from '../services/api';
-import MetricCard from '../components/Dashboard/MetricCard';
-import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
-import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
+  Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import api, { getApiErrorMessage } from '../services/api';
+import { formatEngine, formatRul, formatTimestamp, PageHeading, Panel, PanelHeading, RiskBadge, StateBlock } from '../components/UI/Shared';
+import { usePreferences } from '../i18n/Preferences';
+
+const bucketColors = ['#d87964', '#c69962', '#a8a78a', '#77786f'];
 
 export default function Dashboard() {
-  const navigate = useNavigate();
+  const { t } = usePreferences();
   const [engines, setEngines] = useState([]);
+  const [records, setRecords] = useState([]);
+  const [health, setHealth] = useState(null);
+  const [metadata, setMetadata] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [engineError, setEngineError] = useState('');
+  const [supportError, setSupportError] = useState('');
 
-  // Filters & State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTier, setSelectedTier] = useState('ALL');
-  const [sortField, setSortField] = useState('predicted_rul'); // 'predicted_rul', 'total_cycles', 'engine_id'
-  const [sortAsc, setSortAsc] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(20);
-  const [viewMode, setViewMode] = useState('operational'); // 'operational' vs 'evaluation'
-
-  useEffect(() => {
-    fetchEngines();
-  }, []);
-
-  const fetchEngines = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await api.getEngines();
-      setEngines(data);
-    } catch (err) {
-      setError('Unable to connect to AeroGuard AI backend on localhost:8000.');
-    } finally {
-      setLoading(false);
+  const loadData = async () => {
+    setLoading(true);
+    setEngineError('');
+    setSupportError('');
+    const [fleet, history, status, model] = await Promise.allSettled([
+      api.getEngines(),
+      api.getPredictions(100),
+      api.getHealth(),
+      api.getModelMetadata(),
+    ]);
+    if (fleet.status === 'fulfilled') setEngines(fleet.value);
+    else setEngineError(getApiErrorMessage(fleet.reason));
+    if (history.status === 'fulfilled') setRecords(history.value);
+    if (status.status === 'fulfilled') setHealth(status.value);
+    if (model.status === 'fulfilled') setMetadata(model.value);
+    if (history.status === 'rejected' || status.status === 'rejected' || model.status === 'rejected') {
+      const failures = [history, status, model].filter((item) => item.status === 'rejected');
+      setSupportError(getApiErrorMessage(failures[0].reason));
     }
+    setLoading(false);
   };
 
-  // KPI Metrics computation
-  const counts = useMemo(() => {
-    return {
-      TOTAL: engines.length,
-      CRITICAL: engines.filter((e) => e.urgency_tier === 'CRITICAL').length,
-      WARNING: engines.filter((e) => e.urgency_tier === 'WARNING').length,
-      MODERATE: engines.filter((e) => e.urgency_tier === 'MODERATE').length,
-      NOMINAL: engines.filter((e) => e.urgency_tier === 'NOMINAL').length,
-    };
-  }, [engines]);
+  useEffect(() => { loadData(); }, []);
 
-  // Filtering & Sorting
-  const processedEngines = useMemo(() => {
-    let list = engines.filter((eng) => {
-      const matchSearch = eng.engine_id.toString().includes(searchTerm.trim());
-      const matchTier = selectedTier === 'ALL' || eng.urgency_tier === selectedTier;
-      return matchSearch && matchTier;
-    });
-
-    list.sort((a, b) => {
-      let valA = a[sortField];
-      let valB = b[sortField];
-      if (valA === null || valA === undefined) valA = 9999;
-      if (valB === null || valB === undefined) valB = 9999;
-      return sortAsc ? valA - valB : valB - valA;
-    });
-
-    return list;
-  }, [engines, searchTerm, selectedTier, sortField, sortAsc]);
-
-  // Pagination
-  const totalPages = Math.max(1, Math.ceil(processedEngines.length / pageSize));
-  const paginatedEngines = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return processedEngines.slice(start, start + pageSize);
-  }, [processedEngines, currentPage, pageSize]);
-
-  const handleSort = (field) => {
-    if (sortField === field) {
-      setSortAsc(!sortAsc);
-    } else {
-      setSortField(field);
-      setSortAsc(true);
-    }
-    setCurrentPage(1);
-  };
+  const counts = useMemo(() => ({
+    critical: engines.filter((engine) => engine.urgency_tier === 'CRITICAL').length,
+    warning: engines.filter((engine) => engine.urgency_tier === 'WARNING').length,
+    moderate: engines.filter((engine) => engine.urgency_tier === 'MODERATE').length,
+    nominal: engines.filter((engine) => engine.urgency_tier === 'NOMINAL').length,
+  }), [engines]);
+  const lowestRul = engines.reduce((lowest, engine) => {
+    const value = Number(engine.predicted_rul);
+    return Number.isFinite(value) ? Math.min(lowest, value) : lowest;
+  }, Number.POSITIVE_INFINITY);
+  const distribution = [
+    { range: '0–25', label: 'High · ≤25', count: counts.critical },
+    { range: '26–50', label: 'Elevated · 26–50', count: counts.warning },
+    { range: '51–80', label: 'Moderate · 51–80', count: counts.moderate },
+    { range: '80+', label: 'Lower · >80', count: counts.nominal },
+  ];
+  const recentEvents = records.slice(0, 5);
+  const testMetrics = metadata?.nasa_test_metrics;
 
   return (
-    <div className="space-y-5">
-      {/* Disclaimer */}
-      <DisclaimerBanner />
-
-      {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
-            Fleet Overview
-          </h1>
-          <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
-            NASA C-MAPSS FD001 &bull; Turbofan Engine Degradation & RUL Triage
-          </p>
+    <div className="page-stack">
+      <section className="hero-section">
+        <div className="hero-copy">
+          <p className="eyebrow">{t('ENGINE HEALTH INTELLIGENCE')} <span> / </span> {t('RESEARCH PROTOTYPE')}</p>
+          <h1>{t('Know your engines.')}<br /><span>{t('Before they fail.')}</span></h1>
+          <p className="hero-description">{t('Predictive intelligence for turbofan engine health, remaining useful life, and maintenance planning.')}</p>
+          <div className="hero-actions">
+            <Link className="button button-dark" to="/engines">{t('Explore engines')} <ArrowRight size={16} /></Link>
+            <Link className="button button-quiet" to="/predictions">{t('View predictions')} <ChevronRight size={16} /></Link>
+          </div>
         </div>
+        <aside className="hero-summary" aria-label="System summary">
+          <div className="summary-topline"><span>{t('System summary')}</span><span className={`summary-indicator ${health?.status === 'online' ? 'summary-ok' : ''}`} /></div>
+          <dl>
+            <div><dt>{t('Dataset')}</dt><dd>NASA C-MAPSS FD001</dd></div>
+            <div><dt>{t('Model')}</dt><dd>{metadata?.model_name || t('Unavailable')}</dd></div>
+            <div><dt>{t('Model version')}</dt><dd>{metadata?.version || '—'}</dd></div>
+            <div><dt>{t('System')}</dt><dd>{health?.status === 'online' ? (health.model_loaded ? t('Ready') : t('Model unavailable')) : health ? t('Unavailable') : t('Checking')}</dd></div>
+          </dl>
+          {health?.disclaimer && <p className="summary-caption">{health.disclaimer}</p>}
+        </aside>
+      </section>
 
-        <div className="flex items-center gap-3 text-xs text-[#656D76] dark:text-[#9198A1]">
-          <span className="font-mono bg-[#EAEEF2] dark:bg-[#21262D] px-2 py-0.5 rounded text-[11px]">
-            Model: RF-FD001
-          </span>
-          <span className="font-mono bg-[#EAEEF2] dark:bg-[#21262D] px-2 py-0.5 rounded text-[11px]">
-            Units: 100 Engines
-          </span>
-        </div>
-      </div>
+      <section className="metric-strip" aria-label="Fleet metrics">
+        <div className="metric-item"><span className="metric-label">{t('Demo engines')}</span><strong>{loading ? '—' : engineError ? '—' : engines.length}</strong><span className="metric-caption">{t('Test fleet records')}</span></div>
+        <div className="metric-item"><span className="metric-label">{t('Assessment queue')}</span><strong>{loading ? '—' : engineError ? '—' : counts.critical + counts.warning}</strong><span className="metric-caption">{t('Illustrative high / elevated tiers')}</span></div>
+        <div className="metric-item"><span className="metric-label">{t('Lowest estimated RUL')}</span><strong>{loading || engineError || !Number.isFinite(lowestRul) ? '—' : lowestRul.toFixed(1)}<small>{Number.isFinite(lowestRul) && !engineError ? ` ${t('cycles')}` : ''}</small></strong><span className="metric-caption">{t('Lowest model estimate in this fleet')}</span></div>
+        <div className="metric-item"><span className="metric-label">{t('Prediction records')}</span><strong>{supportError ? '—' : records.length}</strong><span className="metric-caption">{t('Up to the latest 100 retrieved')}</span></div>
+      </section>
 
-      {/* KPI Metric Summary (Clean, restrained, compact cards) */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <MetricCard
-          title="Monitored Engines"
-          value={loading ? '—' : counts.TOTAL}
-          subtitle="Test fleet units"
-        />
-        <MetricCard
-          title="Critical Assessment"
-          value={loading ? '—' : counts.CRITICAL}
-          subtitle="RUL ≤ 25 operating cycles"
-          badge={<span className="w-2 h-2 rounded-full bg-[#CF222E]" />}
-        />
-        <MetricCard
-          title="Elevated Attention"
-          value={loading ? '—' : counts.WARNING}
-          subtitle="25 < RUL ≤ 50 cycles"
-          badge={<span className="w-2 h-2 rounded-full bg-[#9A6700]" />}
-        />
-        <MetricCard
-          title="Moderate Wear"
-          value={loading ? '—' : counts.MODERATE}
-          subtitle="50 < RUL ≤ 80 cycles"
-          badge={<span className="w-2 h-2 rounded-full bg-[#8250DF]" />}
-        />
-        <MetricCard
-          title="Nominal Condition"
-          value={loading ? '—' : counts.NOMINAL}
-          subtitle="RUL > 80 cycles"
-          badge={<span className="w-2 h-2 rounded-full bg-[#1A7F37]" />}
-        />
-      </div>
+      {supportError && <p className="inline-error" role="status">Some summary data could not be loaded: {supportError}</p>}
 
-      {/* Fleet Table Card */}
-      <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg overflow-hidden shadow-xs">
-        {/* Controls Bar: Search, Category Filters, Mode Switcher */}
-        <div className="p-3 border-b border-[#D1D9E0] dark:border-[#30363D] bg-[#F6F8FA] dark:bg-[#161B22] flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 text-xs">
-          {/* Search & Category Filter */}
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-64">
-              <Search className="w-3.5 h-3.5 text-[#848D97] dark:text-[#7D8590] absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                placeholder="Filter by Engine ID (e.g. 34)..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="w-full bg-white dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md pl-8 pr-2.5 py-1.5 text-xs text-[#1F2328] dark:text-[#E6EDF3] placeholder-[#848D97] dark:placeholder-[#7D8590] focus:outline-none focus:border-[#0969DA] dark:focus:border-[#4493F8]"
-              />
+      <div className="content-grid dashboard-grid">
+        <Panel className="monitoring-panel">
+          <PanelHeading
+            title="Engine monitoring"
+            description="Prioritize engines by estimated remaining useful life."
+            action={<Link className="text-link" to="/engines">{t('All engines')} <ArrowRight size={14} /></Link>}
+          />
+          {engineError || loading || engines.length === 0 ? (
+            <StateBlock loading={loading} error={engineError} empty={!loading && !engineError ? 'No engine records are available from the backend.' : ''} onRetry={loadData} />
+          ) : (
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead><tr><th>{t('Engine')}</th><th>{t('Last cycle')}</th><th>{t('Estimated RUL')}</th><th>{t('Assessment tier')}</th><th aria-label={t('Details')} /></tr></thead>
+                <tbody>
+                  {engines.slice(0, 8).map((engine) => (
+                    <tr key={engine.engine_id} className="clickable-row">
+                      <td><Link className="table-primary-link" to={`/engines/${engine.engine_id}`}>{formatEngine(engine.engine_id)}</Link><span className="table-subtext">{engine.dataset_split} split</span></td>
+                      <td className="numeric">{engine.last_cycle}</td>
+                      <td className="numeric rul-value">{formatRul(engine.predicted_rul)}</td>
+                      <td><RiskBadge tier={engine.urgency_tier} /></td>
+                      <td><Link className="icon-link" to={`/engines/${engine.engine_id}`} aria-label={`${t('View')} ${formatEngine(engine.engine_id)}`}><ChevronRight size={17} /></Link></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
+          )}
+          <div className="panel-footnote">{t('Risk tiers are illustrative demo categories, not approved maintenance limits.')}</div>
+        </Panel>
 
-            {/* Filter Pills */}
-            <div className="inline-flex rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#0D1117] p-0.5">
-              {['ALL', 'CRITICAL', 'WARNING', 'MODERATE', 'NOMINAL'].map((tier) => (
-                <button
-                  key={tier}
-                  onClick={() => {
-                    setSelectedTier(tier);
-                    setCurrentPage(1);
-                  }}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                    selectedTier === tier
-                      ? 'bg-[#EFF2F5] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold'
-                      : 'text-[#656D76] dark:text-[#9198A1] hover:text-[#1F2328] dark:hover:text-[#E6EDF3]'
-                  }`}
-                >
-                  {tier} {tier !== 'ALL' && `(${counts[tier] || 0})`}
-                </button>
+        <Panel>
+          <PanelHeading title="Fleet RUL distribution" description="Engine counts from current backend estimates." />
+          {engineError || loading || engines.length === 0 ? (
+            <StateBlock loading={loading} error={engineError} empty={!loading && !engineError ? 'No estimates are available to chart.' : ''} />
+          ) : (
+            <>
+              <div className="chart-wrap chart-distribution">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={distribution} margin={{ top: 12, right: 4, bottom: 0, left: -18 }}>
+                    <CartesianGrid vertical={false} stroke="#e8e4dc" />
+                    <XAxis dataKey="range" tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 11 }} />
+                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} tick={{ fill: '#918d85', fontSize: 10 }} />
+                    <Tooltip cursor={{ fill: '#f0eee8' }} contentStyle={{ background: '#fbfaf7', border: '1px solid #d4d1ca', borderRadius: 8, fontSize: 12 }} formatter={(value) => [`${value} ${t('engines')}`, t('Fleet')]} labelFormatter={(label) => `RUL ${label} ${t('cycles')}`} />
+                    <Bar dataKey="count" radius={[4, 4, 0, 0]} maxBarSize={42}>
+                      {distribution.map((entry, index) => <Cell key={entry.range} fill={bucketColors[index]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              <p className="chart-note">{t('Ranges follow the backend’s configured illustrative urgency thresholds.')}</p>
+            </>
+          )}
+        </Panel>
+      </div>
+
+      <div className="content-grid bottom-grid">
+        <Panel>
+          <PanelHeading title="Latest updates" description="Recent inference records written by the backend." action={<Link className="text-link" to="/history">{t('View history')} <ArrowRight size={14} /></Link>} />
+          {supportError && records.length === 0 ? <StateBlock error={supportError} onRetry={loadData} /> : recentEvents.length === 0 ? (
+            <StateBlock loading={loading} empty={!loading ? 'No prediction events have been recorded yet.' : ''} />
+          ) : (
+            <div className="event-list">
+              {recentEvents.map((record) => (
+                <Link className="event-row" key={record.id} to={`/engines/${record.engine_id}`}>
+                  <span className={`event-marker risk-marker-${String(record.urgency_tier || '').toLowerCase()}`} />
+                  <span className="event-content"><strong>{formatEngine(record.engine_id)} {t('prediction recorded')}</strong><small>{formatTimestamp(record.created_at)} · {t('Cycle')} {record.cycle}</small></span>
+                  <span className="event-rul">{formatRul(record.predicted_rul)}</span>
+                  <ChevronRight size={15} className="muted-icon" />
+                </Link>
               ))}
             </div>
-          </div>
-
-          {/* View Mode Toggle: Operational vs Benchmark Evaluation */}
-          <div className="flex items-center gap-2 self-end md:self-auto">
-            <span className="text-[11px] text-[#656D76] dark:text-[#9198A1]">View:</span>
-            <div className="inline-flex rounded-md border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#0D1117] p-0.5">
-              <button
-                onClick={() => setViewMode('operational')}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                  viewMode === 'operational'
-                    ? 'bg-[#EFF2F5] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold'
-                    : 'text-[#656D76] dark:text-[#9198A1]'
-                }`}
-              >
-                Operational Triage
-              </button>
-              <button
-                onClick={() => setViewMode('evaluation')}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-sm transition-colors ${
-                  viewMode === 'evaluation'
-                    ? 'bg-[#EFF2F5] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] font-semibold'
-                    : 'text-[#656D76] dark:text-[#9198A1]'
-                }`}
-                title="Shows official NASA benchmark ground-truth for offline evaluation"
-              >
-                Benchmark Evaluation
-              </button>
+          )}
+        </Panel>
+        <Panel className="benchmark-panel">
+          <PanelHeading title="Model evaluation" description="Official NASA test split · aggregate metrics" />
+          {testMetrics ? (
+            <div className="benchmark-stats">
+              <div><span>{t('Test engines')}</span><strong>{testMetrics.test_engines ?? '—'}</strong></div>
+              <div><span>{t('Test MAE')}</span><strong>{testMetrics.test_mae_cycles ?? '—'} <small>{t('cycles')}</small></strong></div>
+              <div><span>{t('Test RMSE')}</span><strong>{testMetrics.test_rmse_cycles ?? '—'} <small>{t('cycles')}</small></strong></div>
             </div>
-          </div>
-        </div>
-
-        {/* Data Table */}
-        {loading ? (
-          <div className="p-16 text-center text-xs text-[#656D76] dark:text-[#9198A1]">
-            Loading fleet units and executing model inference...
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center text-xs text-[#CF222E] dark:text-[#FF8182]">
-            <p>{error}</p>
-            <button
-              onClick={fetchEngines}
-              className="mt-2 px-3 py-1 bg-white dark:bg-[#21262D] border border-[#D1D9E0] dark:border-[#30363D] rounded text-xs text-[#1F2328] dark:text-[#E6EDF3]"
-            >
-              Retry
-            </button>
-          </div>
-        ) : paginatedEngines.length === 0 ? (
-          <div className="p-16 text-center text-xs text-[#656D76] dark:text-[#9198A1]">
-            No engines matching search or filter criteria.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#F6F8FA] dark:bg-[#161B22] border-b border-[#D1D9E0] dark:border-[#30363D] text-[#656D76] dark:text-[#848D97] font-semibold text-[11px]">
-                  <th
-                    className="py-2.5 px-3.5 cursor-pointer hover:text-[#1F2328] dark:hover:text-[#E6EDF3]"
-                    onClick={() => handleSort('engine_id')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Engine ID
-                      <ArrowUpDown className="w-3 h-3 text-[#848D97]" />
-                    </div>
-                  </th>
-                  <th
-                    className="py-2.5 px-3.5 cursor-pointer hover:text-[#1F2328] dark:hover:text-[#E6EDF3]"
-                    onClick={() => handleSort('total_cycles')}
-                  >
-                    <div className="flex items-center gap-1">
-                      Observed Cycles
-                      <ArrowUpDown className="w-3 h-3 text-[#848D97]" />
-                    </div>
-                  </th>
-                  <th className="py-2.5 px-3.5">Risk Assessment</th>
-                  <th
-                    className="py-2.5 px-3.5 text-right cursor-pointer hover:text-[#1F2328] dark:hover:text-[#E6EDF3]"
-                    onClick={() => handleSort('predicted_rul')}
-                  >
-                    <div className="flex items-center justify-end gap-1">
-                      Estimated RUL
-                      <ArrowUpDown className="w-3 h-3 text-[#848D97]" />
-                    </div>
-                  </th>
-                  {viewMode === 'evaluation' && (
-                    <>
-                      <th className="py-2.5 px-3.5 text-right">
-                        NASA Ground Truth
-                        <span className="block text-[9px] font-normal text-[#848D97]">
-                          (RUL_FD001 benchmark)
-                        </span>
-                      </th>
-                      <th className="py-2.5 px-3.5 text-right">Error (Δ cycles)</th>
-                    </>
-                  )}
-                  <th className="py-2.5 px-3.5 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#D1D9E0] dark:divide-[#30363D]">
-                {paginatedEngines.map((eng) => {
-                  const errorDelta =
-                    eng.true_rul !== null && eng.predicted_rul !== null
-                      ? (eng.predicted_rul - eng.true_rul).toFixed(1)
-                      : null;
-
-                  return (
-                    <tr
-                      key={eng.engine_id}
-                      className="hover:bg-[#F6F8FA] dark:hover:bg-[#21262D]/60 transition-colors cursor-pointer group"
-                      onClick={() => navigate(`/engines/${eng.engine_id}`)}
-                    >
-                      <td className="py-2.5 px-3.5 font-mono font-semibold text-[#0969DA] dark:text-[#4493F8]">
-                        ENG-{String(eng.engine_id).padStart(3, '0')}
-                      </td>
-                      <td className="py-2.5 px-3.5 font-mono tabular-nums text-[#656D76] dark:text-[#9198A1]">
-                        {eng.total_cycles} cycles
-                      </td>
-                      <td className="py-2.5 px-3.5">
-                        <EngineStatusBadge tier={eng.urgency_tier} />
-                      </td>
-                      <td className="py-2.5 px-3.5 text-right font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                        {eng.predicted_rul}{' '}
-                        <span className="text-[10px] font-normal text-[#848D97]">cycles</span>
-                      </td>
-                      {viewMode === 'evaluation' && (
-                        <>
-                          <td className="py-2.5 px-3.5 text-right font-mono tabular-nums text-[#656D76] dark:text-[#9198A1]">
-                            {eng.true_rul !== null ? `${eng.true_rul} cycles` : '—'}
-                          </td>
-                          <td className="py-2.5 px-3.5 text-right font-mono tabular-nums">
-                            {errorDelta !== null ? (
-                              <span
-                                className={`text-[11px] font-medium ${
-                                  Math.abs(parseFloat(errorDelta)) <= 15
-                                    ? 'text-[#1A7F37] dark:text-[#3FB950]'
-                                    : 'text-[#9A6700] dark:text-[#D4A72C]'
-                                }`}
-                              >
-                                {parseFloat(errorDelta) > 0 ? `+${errorDelta}` : errorDelta}
-                              </span>
-                            ) : (
-                              '—'
-                            )}
-                          </td>
-                        </>
-                      )}
-                      <td className="py-2.5 px-3.5 text-right">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            navigate(`/engines/${eng.engine_id}`);
-                          }}
-                          className="px-2.5 py-1 rounded border border-[#D1D9E0] dark:border-[#30363D] bg-white dark:bg-[#161B22] hover:bg-[#F6F8FA] dark:hover:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] text-[11px] font-medium transition-colors"
-                        >
-                          Inspect
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-
-        {/* Pagination Bar */}
-        <div className="p-3 border-t border-[#D1D9E0] dark:border-[#30363D] bg-[#F6F8FA] dark:bg-[#161B22] flex items-center justify-between text-xs text-[#656D76] dark:text-[#9198A1]">
-          <span>
-            Showing{' '}
-            <strong className="text-[#1F2328] dark:text-[#E6EDF3]">
-              {processedEngines.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}
-            </strong>{' '}
-            to{' '}
-            <strong className="text-[#1F2328] dark:text-[#E6EDF3]">
-              {Math.min(currentPage * pageSize, processedEngines.length)}
-            </strong>{' '}
-            of{' '}
-            <strong className="text-[#1F2328] dark:text-[#E6EDF3]">
-              {processedEngines.length}
-            </strong>{' '}
-            engines
-          </span>
-
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="p-1 rounded border border-[#D1D9E0] dark:border-[#30363D] disabled:opacity-40 hover:bg-[#EAEEF2] dark:hover:bg-[#21262D]"
-              title="Previous Page"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-            </button>
-            <span className="font-mono text-[11px] px-2">
-              Page {currentPage} of {totalPages}
-            </span>
-            <button
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-              className="p-1 rounded border border-[#D1D9E0] dark:border-[#30363D] disabled:opacity-40 hover:bg-[#EAEEF2] dark:hover:bg-[#21262D]"
-              title="Next Page"
-            >
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        </div>
+          ) : <StateBlock loading={loading} error={supportError || ''} empty={!loading && !supportError ? 'Evaluation metrics are not available.' : ''} />}
+          <p className="chart-note">{t('Aggregate test metrics are not a guarantee of an individual prediction’s accuracy.')}</p>
+        </Panel>
       </div>
+      <div className="dashboard-bottom-note"><span>NASA C-MAPSS FD001</span><span>{metadata?.target_convention || t('RUL estimates use the dataset-defined end-of-life target.')}</span><span className="note-update">{records[0]?.created_at ? <>{t('Latest record')} <ArrowDownRight size={13} /> {formatTimestamp(records[0].created_at)}</> : t('No prediction timestamp available')}</span></div>
     </div>
   );
 }

@@ -56,6 +56,7 @@ def test_get_single_engine():
     detail = get_engine(1)
     assert detail.engine_id == 1
     assert len(detail.telemetry_history) > 0
+    assert detail.telemetry_history[-1].sensor_6 is not None
     assert detail.urgency_tier in ["CRITICAL", "WARNING", "MODERATE", "NOMINAL"]
     assert detail.recommendation is not None
     # Verify sensor_6 data integrity in telemetry history
@@ -110,6 +111,7 @@ def test_model_metadata():
     assert meta["model_name"] == "RandomForestRegressor_FD001"
     assert "cv_validation_metrics" in meta
     assert "nasa_test_metrics" in meta
+    assert isinstance(meta["anomaly_detector_loaded"], bool)
 
 def test_replay_endpoint():
     res = replay_engine_history(engine_id=34, sample_stride=10)
@@ -119,6 +121,9 @@ def test_replay_endpoint():
     assert len(res["timeline_steps"]) > 0
     first_step = res["timeline_steps"][0]
     assert "predicted_rul" in first_step
+    assert "is_anomalous" in first_step
+    assert "anomaly_score" in first_step
+    assert "top_sensor_drifts" in first_step
     assert "key_telemetry" in first_step
 
 def test_anomaly_detection_endpoint():

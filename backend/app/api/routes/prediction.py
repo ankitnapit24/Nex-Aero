@@ -25,7 +25,7 @@ def predict_rul(payload: TelemetryInput, db: Session = Depends(get_db)):
     """
     row_dict = payload.model_dump()
     engine_id = row_dict.pop("engine_id")
-    
+
     try:
         result = predictor.predict_single_row(row_dict, engine_id=engine_id)
     except Exception as e:
@@ -74,7 +74,10 @@ def get_model_metadata():
     """
     Returns the loaded model metadata, training metrics, and anomaly detector parameters.
     """
-    return predictor.metadata
+    return {
+        **predictor.metadata,
+        "anomaly_detector_loaded": predictor.anomaly_model is not None,
+    }
 
 @router.post("/demo/replay", response_model=Dict[str, Any])
 def replay_engine_history(
@@ -146,7 +149,7 @@ def get_anomalies(
     """
     if engine_service.test_df is None:
         raise HTTPException(status_code=503, detail="Test dataset not loaded.")
-    
+
     target_engine = engine_id if isinstance(engine_id, int) else None
     target_cycle = cycle if isinstance(cycle, int) else None
     is_anomaly_only = anomaly_only if isinstance(anomaly_only, bool) else False
@@ -182,10 +185,10 @@ def get_anomalies(
             is_anom = pred.get("is_anomalous", False)
             if is_anom:
                 anomalies_detected += 1
-            
+
             if is_anomaly_only and not is_anom:
                 continue
-                
+
             records.append({
                 "engine_id": eid,
                 "cycle": int(row["cycle"]),
@@ -264,4 +267,3 @@ def explain_custom_telemetry(payload: TelemetryInput):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Explanation calculation failed: {str(e)}")
-

@@ -30,6 +30,9 @@ Returns operational system state, database connectivity status, and ML model art
 }
 ```
 
+### Model Metadata
+`GET /api/model-metadata` returns model names, versions, training and evaluation metrics, and an `anomaly_detector_loaded` boolean. The boolean reflects whether the Isolation Forest artifact loaded successfully; consumers should not treat fallback values as detector classifications when it is `false`.
+
 ---
 
 ## 2. List Fleet Engines

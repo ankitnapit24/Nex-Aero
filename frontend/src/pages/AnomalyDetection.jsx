@@ -1,246 +1,207 @@
-import React, { useState, useEffect } from 'react';
-import { AlertOctagon, CheckCircle2, ShieldAlert, Activity, ArrowRight, Search, Filter } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import api from '../services/api';
-import EngineStatusBadge from '../components/EngineCards/EngineStatusBadge';
-import DisclaimerBanner from '../components/Alerts/DisclaimerBanner';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { Activity, AlertTriangle, Search } from 'lucide-react';
+import {
+  CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
+} from 'recharts';
+import api, { getApiErrorMessage } from '../services/api';
+import HistoricalReplay from '../components/Charts/HistoricalReplay';
+import { Disclaimer, formatEngine, PageHeading, Panel, PanelHeading, StateBlock } from '../components/UI/Shared';
+import { usePreferences } from '../i18n/Preferences';
 
 export default function AnomalyDetection() {
-  const navigate = useNavigate();
-  const [anomaliesData, setAnomaliesData] = useState({ items: [], total_evaluated: 0, anomalies_detected: 0 });
-  const [loading, setLoading] = useState(true);
+  const { t } = usePreferences();
+  const [engines, setEngines] = useState([]);
+  const [engineId, setEngineId] = useState('');
+  const [sampleStride, setSampleStride] = useState(10);
+  const [replay, setReplay] = useState(null);
+  const [loadingFleet, setLoadingFleet] = useState(true);
+  const [loadingReplay, setLoadingReplay] = useState(false);
+  const [fleetError, setFleetError] = useState('');
+  const [replayError, setReplayError] = useState('');
+  const [detectorLoaded, setDetectorLoaded] = useState(false);
+  const [metadataError, setMetadataError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
+  const [fleetAnomalies, setFleetAnomalies] = useState(null);
+  const [loadingAnomalies, setLoadingAnomalies] = useState(true);
+  const [anomalyError, setAnomalyError] = useState('');
   const [anomalyOnly, setAnomalyOnly] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchAnomalies();
-  }, [anomalyOnly]);
+  const loadFleet = async () => {
+    setLoadingFleet(true);
+    setFleetError('');
+    const [fleetResult, metadataResult] = await Promise.allSettled([
+      api.getEngines(),
+      api.getModelMetadata(),
+    ]);
+    if (fleetResult.status === 'fulfilled') {
+      setEngines(fleetResult.value);
+      setEngineId((current) => fleetResult.value.some((engine) => String(engine.engine_id) === current)
+        ? current
+        : fleetResult.value[0] ? String(fleetResult.value[0].engine_id) : '');
+    } else {
+      setFleetError(getApiErrorMessage(fleetResult.reason));
+    }
+    if (metadataResult.status === 'fulfilled') {
+      setDetectorLoaded(metadataResult.value.anomaly_detector_loaded === true);
+      setMetadataError('');
+    } else {
+      setDetectorLoaded(false);
+      setMetadataError(getApiErrorMessage(metadataResult.reason));
+    }
+    setLoadingFleet(false);
+  };
 
-  const fetchAnomalies = async () => {
+  useEffect(() => { loadFleet(); }, []);
+
+  const loadAnomalies = async () => {
+    setLoadingAnomalies(true);
+    setAnomalyError('');
     try {
-      setLoading(true);
-      setError(null);
-      const data = await api.getAnomalies({ anomaly_only: anomalyOnly, limit: 100 });
-      setAnomaliesData(data);
-    } catch (err) {
-      console.error('Failed to load anomaly detection results:', err);
-      setError('Failed to communicate with Anomaly Detection service.');
+      setFleetAnomalies(await api.getAnomalies({ anomaly_only: anomalyOnly, limit: 100 }));
+    } catch (requestError) {
+      setFleetAnomalies(null);
+      setAnomalyError(getApiErrorMessage(requestError, 'Fleet anomaly results could not be loaded.'));
     } finally {
-      setLoading(false);
+      setLoadingAnomalies(false);
     }
   };
 
-  const filteredItems = (anomaliesData.items || []).filter((item) => {
-    if (!searchTerm) return true;
-    return (
-      String(item.engine_id).includes(searchTerm) ||
-      `ENG-${String(item.engine_id).padStart(3, '0')}`.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  });
+  useEffect(() => { loadAnomalies(); }, [anomalyOnly]);
+
+  const loadReplay = async () => {
+    if (!engineId) return;
+    setLoadingReplay(true);
+    setReplayError('');
+    try {
+      setReplay(await api.replayEngine(Number(engineId), sampleStride));
+    } catch (requestError) {
+      setReplay(null);
+      setReplayError(getApiErrorMessage(requestError, 'Historical replay could not be loaded.'));
+    } finally {
+      setLoadingReplay(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!engineId) return;
+    loadReplay();
+  }, [engineId, sampleStride, reloadToken]);
+
+  const steps = replay?.timeline_steps || [];
+  const flaggedSteps = detectorLoaded ? steps.filter((step) => step.is_anomalous) : [];
+  const driftPeak = useMemo(() => steps.reduce((peak, step) => (
+    step.top_sensor_drifts || []
+  ).reduce((max, drift) => Math.max(max, Number(drift.abs_z) || 0), peak), 0), [steps]);
+  const mostAnomalous = detectorLoaded && steps.length
+    ? steps.reduce((lowest, step) => Number(step.anomaly_score) < Number(lowest.anomaly_score) ? step : lowest)
+    : null;
+  const visibleAnomalies = (fleetAnomalies?.items || []).filter((item) => (
+    !searchTerm
+    || String(item.engine_id).includes(searchTerm.trim())
+    || formatEngine(item.engine_id).toLowerCase().includes(searchTerm.trim().toLowerCase())
+  ));
 
   return (
-    <div className="space-y-5">
-      <DisclaimerBanner />
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D1D9E0] dark:border-[#30363D] pb-4">
-        <div>
-          <h1 className="text-xl font-semibold text-[#1F2328] dark:text-[#E6EDF3] tracking-tight">
-            Unsupervised Anomaly Detection
-          </h1>
-          <p className="text-xs text-[#656D76] dark:text-[#9198A1] mt-0.5">
-            Isolation Forest sensor drift detection trained on 3,000 nominal baseline operating cycles (physical sensors only)
-          </p>
+    <div className="page-stack">
+      <PageHeading eyebrow="UNSUPERVISED MONITORING" title="Anomaly detection" description="Review Isolation Forest outputs and baseline sensor drift over sampled historical engine data." />
+      <Disclaimer />
+      <Panel>
+        <PanelHeading title="Historical replay source" description="Replay is simulated from NASA C-MAPSS dataset history; it is not live aircraft telemetry." />
+        <div className="anomaly-filters">
+          <label className="filter-field"><span>{t('Engine')}</span><select className="form-select" value={engineId} onChange={(event) => setEngineId(event.target.value)} disabled={loadingFleet || !!fleetError}><option value="">{t('Select engine')}</option>{engines.map((engine) => <option value={engine.engine_id} key={engine.engine_id}>{formatEngine(engine.engine_id)} · {engine.last_cycle} {t('cycles')}</option>)}</select></label>
+          <label className="filter-field"><span>{t('Sample every')}</span><select className="form-select" value={sampleStride} onChange={(event) => setSampleStride(Number(event.target.value))}><option value={1}>1 {t('cycle')}</option><option value={5}>5 {t('cycles')}</option><option value={10}>10 {t('cycles')}</option><option value={20}>20 {t('cycles')}</option></select></label>
+          <button type="button" className="button button-outline" onClick={() => setReloadToken((token) => token + 1)} disabled={!engineId || loadingReplay}>{t('Refresh replay')}</button>
         </div>
+        {fleetError ? <StateBlock error={fleetError} onRetry={loadFleet} /> : loadingFleet ? <StateBlock loading /> : null}
+      </Panel>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setAnomalyOnly(!anomalyOnly)}
-            className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors flex items-center gap-1.5 ${
-              anomalyOnly
-                ? 'bg-[#CF222E]/10 border-[#CF222E] text-[#CF222E] dark:text-[#F85149]'
-                : 'bg-white dark:bg-[#21262D] border-[#D1D9E0] dark:border-[#30363D] text-[#1F2328] dark:text-[#E6EDF3]'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            {anomalyOnly ? 'Showing Anomalies Only' : 'Filter Anomalies Only'}
-          </button>
-        </div>
+      {metadataError && <p className="inline-error" role="status">{t('Detector readiness could not be confirmed:')} {metadataError}</p>}
+      <div className="anomaly-metrics">
+        <div className="anomaly-metric"><span className="metric-label">{t('Sampled observations')}</span><strong>{loadingReplay ? '—' : steps.length || '—'}</strong><span className="metric-caption">{t('From selected historical replay')}</span></div>
+        <div className="anomaly-metric"><span className="metric-label">{t('Flagged observations')}</span><strong>{loadingReplay || !detectorLoaded ? '—' : flaggedSteps.length}</strong><span className="metric-caption">{detectorLoaded ? t('Isolation Forest output') : t('Detector unavailable')}</span></div>
+        <div className="anomaly-metric"><span className="metric-label">{t('Lowest decision score')}</span><strong>{loadingReplay || !mostAnomalous ? '—' : Number(mostAnomalous.anomaly_score).toFixed(3)}</strong><span className="metric-caption">{t('Lower scores are more anomalous')}</span></div>
+        <div className="anomaly-metric"><span className="metric-label">{t('Largest baseline drift')}</span><strong>{loadingReplay || !steps.length ? '—' : `${driftPeak.toFixed(2)}σ`}</strong><span className="metric-caption">{t('Maximum absolute sensor z-score')}</span></div>
       </div>
 
-      {/* Key Specifications Grid */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-          <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-            Detector Algorithm
-          </span>
-          <div className="mt-1 text-base font-mono font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-            Isolation Forest
-          </div>
-          <span className="text-[10px] text-[#848D97]">18 physical features (no cycle/RUL)</span>
+      {!loadingFleet && !fleetError && !detectorLoaded && (
+        <div className="notice notice-warning anomaly-notice"><AlertTriangle size={15} /> {t('The backend reports that its Isolation Forest artifact is not loaded. This view will not treat fallback anomaly values as detector results; baseline sensor-drift attribution remains available.')}</div>
+      )}
+
+      <HistoricalReplay
+        data={replay}
+        loading={loadingReplay || loadingFleet}
+        error={replayError}
+        onLoad={() => setReloadToken((token) => token + 1)}
+        detectorLoaded={detectorLoaded}
+      />
+
+      <Panel>
+        <PanelHeading
+          title="Fleet anomaly surveillance"
+          description="Terminal-cycle Isolation Forest classifications and sensor-drift results returned by the backend."
+          action={<button className="button button-outline" type="button" onClick={loadAnomalies} disabled={loadingAnomalies}>{loadingAnomalies ? t('Loading…') : t('Refresh fleet results')}</button>}
+        />
+        <div className="anomaly-fleet-controls">
+          <label className="search-field"><Search size={15} aria-hidden="true" /><span className="sr-only">{t('Search engine number')}</span><input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder={t('Find engine by number')} /></label>
+          <label className="anomaly-filter-toggle"><input type="checkbox" checked={anomalyOnly} onChange={(event) => setAnomalyOnly(event.target.checked)} disabled={!detectorLoaded} /><span>{t('Show anomalies only')}</span></label>
+          {fleetAnomalies && <span className="filter-count">{fleetAnomalies.anomalies_detected} / {fleetAnomalies.total_evaluated} {t('flagged')}</span>}
         </div>
-
-        <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-          <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-            Fleet Evaluated
-          </span>
-          <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-            {anomaliesData.total_evaluated || 100} units
-          </div>
-          <span className="text-[10px] text-[#848D97]">Terminal operational cycles</span>
-        </div>
-
-        <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-          <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-            Flagged Anomalies
-          </span>
-          <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#CF222E] dark:text-[#F85149]">
-            {anomaliesData.anomalies_detected}
-          </div>
-          <span className="text-[10px] text-[#848D97]">Exceeds 5% baseline density contour</span>
-        </div>
-
-        <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-3.5">
-          <span className="text-[11px] text-[#656D76] dark:text-[#848D97] block font-medium">
-            Contamination Threshold
-          </span>
-          <div className="mt-1 text-xl font-mono tabular-nums font-semibold text-[#0969DA] dark:text-[#4493F8]">
-            0.05
-          </div>
-          <span className="text-[10px] text-[#848D97]">Unsupervised decision boundary</span>
-        </div>
-      </div>
-
-      {/* Engineering Note */}
-      <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg p-4 space-y-1.5">
-        <h3 className="text-xs font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-          Aviation Engineering Insight: Isolation Forest vs Supervised RUL
-        </h3>
-        <p className="text-xs text-[#656D76] dark:text-[#9198A1] leading-relaxed">
-          The Isolation Forest model isolates multivariate anomaly patterns across high-pressure compressor temperatures, burner pressures, and fuel flow rates without using operating cycle count or engine identifiers. A negative anomaly score indicates that the turbine observation falls outside the 95% nominal envelope established during early operating cycles.
-        </p>
-      </div>
-
-      {/* Table Container */}
-      <div className="bg-white dark:bg-[#161B22] border border-[#D1D9E0] dark:border-[#30363D] rounded-lg overflow-hidden">
-        <div className="p-3 border-b border-[#D1D9E0] dark:border-[#30363D] bg-[#F6F8FA] dark:bg-[#161B22] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-              Fleet Anomaly Surveillance
-            </span>
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-[#EAEEF2] dark:bg-[#21262D] text-[#656D76] dark:text-[#848D97]">
-              {filteredItems.length} records
-            </span>
-          </div>
-
-          <div className="relative w-full sm:w-64">
-            <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-[#848D97]" />
-            <input
-              type="text"
-              placeholder="Search engine ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-8 pr-3 py-1 text-xs bg-white dark:bg-[#0D1117] border border-[#D1D9E0] dark:border-[#30363D] rounded-md text-[#1F2328] dark:text-[#E6EDF3] focus:outline-none focus:border-[#0969DA]"
-            />
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="p-8 text-center text-xs text-[#848D97]">
-            Running fleet-wide Isolation Forest inference...
-          </div>
-        ) : error ? (
-          <div className="p-8 text-center text-xs text-[#CF222E] dark:text-[#F85149]">
-            {error}
-          </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="p-8 text-center text-xs text-[#848D97]">
-            No engines matching current filter criteria.
-          </div>
+        {anomalyError || loadingAnomalies || visibleAnomalies.length === 0 ? (
+          <StateBlock loading={loadingAnomalies} error={anomalyError} empty={!loadingAnomalies && !anomalyError ? 'No fleet observations match the current filters.' : ''} onRetry={loadAnomalies} />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead>
-                <tr className="bg-[#F6F8FA] dark:bg-[#161B22] border-b border-[#D1D9E0] dark:border-[#30363D] text-[#656D76] dark:text-[#848D97] font-semibold text-[11px]">
-                  <th className="py-2.5 px-3">Engine Unit</th>
-                  <th className="py-2.5 px-3">Observed Cycle</th>
-                  <th className="py-2.5 px-3">Anomaly Classification</th>
-                  <th className="py-2.5 px-3">Isolation Score</th>
-                  <th className="py-2.5 px-3">Primary Sensor Deviations</th>
-                  <th className="py-2.5 px-3 text-right">Estimated RUL</th>
-                  <th className="py-2.5 px-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#D1D9E0] dark:divide-[#30363D]">
-                {filteredItems.map((item) => (
-                  <tr
-                    key={item.engine_id}
-                    onClick={() => navigate(`/engines/${item.engine_id}`)}
-                    className="hover:bg-[#F6F8FA] dark:hover:bg-[#21262D]/60 transition-colors cursor-pointer"
-                  >
-                    <td className="py-2.5 px-3 font-mono font-semibold text-[#0969DA] dark:text-[#4493F8]">
-                      ENG-{String(item.engine_id).padStart(3, '0')}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-[#656D76] dark:text-[#9198A1]">
-                      {item.cycle}
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {item.is_anomalous ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-[#CF222E]/10 text-[#CF222E] dark:text-[#F85149] border border-[#CF222E]/20">
-                          <AlertOctagon className="w-3 h-3" />
-                          ANOMALY FLAGGED
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-[#1A7F37]/10 text-[#1A7F37] dark:text-[#3FB950] border border-[#1A7F37]/20">
-                          <CheckCircle2 className="w-3 h-3" />
-                          NOMINAL ENVELOPE
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 font-mono text-xs">
-                      <span className={item.anomaly_score < 0 ? 'text-[#CF222E] dark:text-[#F85149] font-semibold' : 'text-[#656D76] dark:text-[#9198A1]'}>
-                        {item.anomaly_score !== null ? item.anomaly_score.toFixed(3) : 'N/A'}
-                      </span>
-                    </td>
-                    <td className="py-2.5 px-3 text-[11px]">
-                      {item.top_sensor_drifts && item.top_sensor_drifts.length > 0 ? (
-                        <div className="flex flex-wrap gap-1 max-w-xs">
-                          {item.top_sensor_drifts.slice(0, 2).map((drift, i) => (
-                            <span
-                              key={i}
-                              className="px-1.5 py-0.5 rounded bg-[#EAEEF2] dark:bg-[#21262D] text-[#1F2328] dark:text-[#E6EDF3] text-[10px] font-mono"
-                            >
-                              {drift.feature}: {drift.delta > 0 ? '+' : ''}{drift.delta} ({drift.abs_z}σ)
-                            </span>
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-[#848D97]">Baseline nominal</span>
-                      )}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-semibold text-[#1F2328] dark:text-[#E6EDF3]">
-                      {item.predicted_rul}c
-                    </td>
-                    <td className="py-2.5 px-3 text-right">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/engines/${item.engine_id}`);
-                        }}
-                        className="px-2.5 py-1 rounded border border-[#D1D9E0] dark:border-[#30363D] hover:bg-[#EAEEF2] dark:hover:bg-[#30363D] text-[11px] text-[#1F2328] dark:text-[#E6EDF3] inline-flex items-center gap-1 font-medium transition-colors"
-                      >
-                        Inspect
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                    </td>
+          <div className="table-scroll">
+            <table className="data-table">
+              <thead><tr><th>{t('Engine')}</th><th>{t('Cycle')}</th><th>{t('Anomaly status')}</th><th>{t('Decision score')}</th><th>{t('Largest sensor drifts')}</th><th>{t('Estimated RUL')}</th></tr></thead>
+              <tbody>
+                {visibleAnomalies.map((item) => (
+                  <tr key={item.engine_id}>
+                    <td><Link className="table-primary-link" to={`/engines/${item.engine_id}`}>{formatEngine(item.engine_id)}</Link></td>
+                    <td className="numeric">{item.cycle}</td>
+                    <td>{detectorLoaded ? t(item.is_anomalous ? 'Flagged' : 'Not flagged') : t('Unavailable')}</td>
+                    <td className="numeric">{detectorLoaded && item.anomaly_score !== null && Number.isFinite(Number(item.anomaly_score)) ? Number(item.anomaly_score).toFixed(3) : '—'}</td>
+                    <td className="drift-summary">{(item.top_sensor_drifts || []).slice(0, 2).map((drift) => `${drift.feature} ${Number(drift.delta) > 0 ? '+' : ''}${drift.delta} (${Number(drift.abs_z).toFixed(1)}σ)`).join(' · ') || t('No sensor drift detected')}</td>
+                    <td className="numeric">{item.predicted_rul === null || item.predicted_rul === undefined ? '—' : `${Number(item.predicted_rul).toFixed(1)} ${t('cycles')}`}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Panel>
+
+      {detectorLoaded && (
+        <div className="content-grid anomaly-grid">
+          <Panel>
+            <PanelHeading title="Anomaly score through replay" description="Isolation Forest decision-function values returned by the backend; lower scores indicate more anomalous observations." />
+            {loadingReplay ? <StateBlock loading /> : steps.length === 0 ? <StateBlock empty="No score samples are available." /> : (
+              <div className="chart-wrap chart-anomaly">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={steps} margin={{ top: 10, right: 12, bottom: 3, left: -8 }}>
+                    <CartesianGrid stroke="#e8e4dc" strokeDasharray="3 5" />
+                    <XAxis dataKey="cycle" type="number" domain={['dataMin', 'dataMax']} tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 10 }} />
+                    <YAxis domain={['auto', 'auto']} tickLine={false} axisLine={false} tick={{ fill: '#77746d', fontSize: 10 }} width={48} />
+                    <Tooltip contentStyle={{ background: '#fbfaf7', border: '1px solid #d4d1ca', borderRadius: 8, fontSize: 11 }} labelFormatter={(cycle) => `${t('Cycle')} ${cycle}`} formatter={(value) => [Number(value).toFixed(3), t('Decision score')]} />
+                    <Line type="monotone" dataKey="anomaly_score" stroke="#75838a" strokeWidth={2} dot={(props) => <circle cx={props.cx} cy={props.cy} r={props.payload.is_anomalous ? 4 : 2} fill={props.payload.is_anomalous ? '#c66f5e' : '#75838a'} stroke="#fbfaf7" strokeWidth={1} />} isAnimationActive={false} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </Panel>
+          <Panel>
+            <PanelHeading title="Flagged replay observations" description="Only backend steps marked anomalous are listed." />
+            {loadingReplay ? <StateBlock loading /> : flaggedSteps.length === 0 ? (
+              <StateBlock empty="No sampled observations were flagged in this replay." />
+            ) : (
+              <div className="flagged-list">{flaggedSteps.map((step) => (
+                <div className="flagged-row" key={step.cycle}><AlertTriangle size={15} /><span><strong>{t('Cycle')} {step.cycle}</strong><small>{t('Estimated RUL')} {step.predicted_rul} {t('cycles')}</small></span><b>{Number(step.anomaly_score).toFixed(3)}</b></div>
+              ))}</div>
+            )}
+          </Panel>
+        </div>
+      )}
+      <div className="anomaly-method"><Activity size={17} /><p><strong>{t('Two complementary signals.')}</strong> {t('The Isolation Forest flags multivariate observations that differ from its nominal training envelope. Sensor drift attribution ranks individual readings by absolute z-score against the backend’s healthy baseline. These are exploratory signals, not diagnoses or approved maintenance thresholds.')}</p></div>
     </div>
   );
 }
