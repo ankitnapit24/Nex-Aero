@@ -7,6 +7,7 @@ import os
 import sys
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
@@ -23,6 +24,7 @@ from backend.app.api.routes.prediction import (
     explain_engine_prediction
 )
 from backend.app.api.routes.alert import list_alerts, create_alert, update_alert_status
+from backend.app.main import app
 from backend.app.schemas.prediction import TelemetryInput
 from backend.app.schemas.alert import AlertCreate, AlertUpdate
 from backend.app.database.session import SessionLocal
@@ -105,6 +107,19 @@ def test_predict_and_persistence(db):
     history = get_prediction_history(limit=5, db=db)
     assert len(history) >= 1
     assert history[0].engine_id == 1
+
+def test_predict_endpoint_allows_unavailable_anomaly_score():
+    detail = get_engine(91)
+    payload = {
+        "engine_id": detail.engine_id,
+        **detail.telemetry_history[-1].model_dump(),
+    }
+
+    with TestClient(app) as client:
+        response = client.post("/api/predict", json=payload)
+
+    assert response.status_code == 200
+    assert response.json()["anomaly_score"] is None
 
 def test_model_metadata():
     meta = get_model_metadata()

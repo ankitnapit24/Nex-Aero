@@ -30,7 +30,7 @@ class PredictionResponse(BaseModel):
     raw_rul_cycles: float
     urgency_tier: str
     is_anomalous: bool = False
-    anomaly_score: float = 0.0
+    anomaly_score: Optional[float] = None
     top_sensor_drifts: List[Dict[str, Any]] = []
     recommendation: str
     model_version: str
