@@ -1,5 +1,5 @@
 """
-AeroGuard AI - NASA C-MAPSS Dataset Downloader & Verifier
+Nex Aero - NASA C-MAPSS Dataset Downloader & Verifier
 Downloads and unpacks the C-MAPSS dataset (specifically subset FD001).
 """
 
@@ -66,7 +66,7 @@ def download_and_extract():
         try:
             req = urllib.request.Request(
                 url,
-                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AeroGuard-AI/1.0"}
+                headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Nex-Aero/1.0"}
             )
             with urllib.request.urlopen(req, timeout=30) as response, open(ZIP_DESTINATION, "wb") as out_file:
                 total_length = response.getheader('content-length')

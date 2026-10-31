@@ -45,8 +45,8 @@ export default function AppShell({ children }) {
 
   useEffect(() => {
     document.title = language === 'hi'
-      ? 'एयरोगार्ड AI — इंजन स्वास्थ्य जानकारी'
-      : 'AeroGuard AI — Engine Health Intelligence';
+      ? 'नेक्स एयरो — इंजन स्वास्थ्य जानकारी'
+      : 'Nex Aero — Engine Health Intelligence';
   }, [language]);
 
   const closeMenu = () => setMenuOpen(false);
@@ -62,9 +62,9 @@ export default function AppShell({ children }) {
     <div className="app-shell">
       <header className="site-header">
         <div className="site-header-inner">
-          <NavLink to="/" className="brand" onClick={closeMenu} aria-label={t('AeroGuard AI overview')}>
+          <NavLink to="/" className="brand" onClick={closeMenu} aria-label={t('Nex Aero overview')}>
             <span className="brand-mark"><Activity size={17} strokeWidth={2.2} /></span>
-            <span>AeroGuard <span className="brand-light">AI</span></span>
+            <span>Nex <span className="brand-light">Aero</span></span>
           </NavLink>
           <button
             className="mobile-menu-button"
@@ -116,7 +116,7 @@ export default function AppShell({ children }) {
       </header>
       <main className="main-content">{children}</main>
       <footer className="site-footer">
-        <span>AeroGuard AI · NASA C-MAPSS FD001</span>
+        <span>Nex Aero · NASA C-MAPSS FD001</span>
         <span>{t('Research prototype · Not for flight operations')}</span>
       </footer>
     </div>

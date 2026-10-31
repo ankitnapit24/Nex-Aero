@@ -1,4 +1,4 @@
-# AeroGuard AI - Machine Learning Model Documentation
+# Nex Aero - Machine Learning Model Documentation
 
 ## 1. Executive Summary
 - **Target Variable:** Remaining Useful Life (RUL) in operating cycles.
@@ -16,7 +16,7 @@
 ## 2. Methodology & Leakage Prevention
 
 ### Engine-Wise Grouping
-In turbofan degradation datasets, standard row-wise $k$-fold cross-validation results in severe data leakage because adjacent cycles from the same engine appear in both train and validation folds. In AeroGuard AI:
+In turbofan degradation datasets, standard row-wise $k$-fold cross-validation results in severe data leakage because adjacent cycles from the same engine appear in both train and validation folds. In Nex Aero:
 - `GroupKFold(n_splits=5)` groups by `engine_id`.
 - 100% of telemetry rows belonging to an individual engine reside exclusively within the training or validation fold in any given split.
 

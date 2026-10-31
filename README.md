@@ -1,4 +1,4 @@
-# Nex - Aero: Turbofan Engine Predictive Maintenance Platform
+# Nex Aero: Turbofan Engine Predictive Maintenance Platform
 
 [![Python](https://img.shields.io/badge/Python-3.11%2B%20%7C%203.14-blue.svg)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110%2B-009688.svg)](https://fastapi.tiangolo.com)
@@ -7,7 +7,7 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38bdf8.svg)](https://tailwindcss.com)
 [![NASA C-MAPSS](https://img.shields.io/badge/NASA%20Data-C--MAPSS%20FD001-orange.svg)](https://data.nasa.gov)
 
-Nex - Aero is an enterprise-grade, leak-free machine-learning aviation reliability platform designed to estimate Remaining Useful Life (RUL) and detect sensor anomalies in commercial turbofan aircraft engines based on the NASA C-MAPSS FD001 dataset.
+Nex Aero is an enterprise-grade, leak-free machine-learning aviation reliability platform designed to estimate Remaining Useful Life (RUL) and detect sensor anomalies in commercial turbofan aircraft engines based on the NASA C-MAPSS FD001 dataset.
 
 > **DEMO & RESEARCH PROTOTYPE DISCLAIMER:**
 > This software is an experimental decision-support prototype. Outputs do **NOT** certify aircraft airworthiness, diagnose real-world flight hardware, or autonomously authorize maintenance actions without certified human engineering approval according to applicable maintenance manuals.
@@ -151,4 +151,4 @@ Open your browser to: [http://localhost:5173](http://localhost:5173)
 
 ## License & Attribution
 - NASA C-MAPSS dataset provided by NASA Ames Research Center Prognostics Center of Excellence (PCoE).
-- Developed for demonstration and research purposes under the AeroGuard AI initiative.
+- Developed for demonstration and research purposes under the Nex Aero initiative.

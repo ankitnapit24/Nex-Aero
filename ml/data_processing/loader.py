@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Data Ingestion & Preprocessing Loader
+Nex Aero - Data Ingestion & Preprocessing Loader
 Parses NASA C-MAPSS FD001 text files, validates data integrity, and computes RUL labels.
 """
 

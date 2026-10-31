@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Unit Tests for Data Ingestion and RUL Target Generation
+Nex Aero - Unit Tests for Data Ingestion and RUL Target Generation
 """
 
 import os

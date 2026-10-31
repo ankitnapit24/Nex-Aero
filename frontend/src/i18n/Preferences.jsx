@@ -127,7 +127,7 @@ const translations = {
   'Prediction history': 'पूर्वानुमान इतिहास',
   'Source:': 'स्रोत:',
   'Cycle': 'चक्र',
-  'AeroGuard AI is an experimental research prototype. Estimates and assessment priorities require qualified human review; this system does not certify airworthiness or authorize maintenance.': 'AeroGuard AI एक प्रायोगिक अनुसंधान प्रोटोटाइप है। अनुमानों और मूल्यांकन प्राथमिकताओं की योग्य मानव समीक्षा आवश्यक है; यह सिस्टम उड़ान-योग्यता प्रमाणित या रखरखाव अधिकृत नहीं करता।',
+  'Nex Aero is an experimental research prototype. Estimates and assessment priorities require qualified human review; this system does not certify airworthiness or authorize maintenance.': 'Nex Aero एक प्रायोगिक अनुसंधान प्रोटोटाइप है। अनुमानों और मूल्यांकन प्राथमिकताओं की योग्य मानव समीक्षा आवश्यक है; यह सिस्टम उड़ान-योग्यता प्रमाणित या रखरखाव अधिकृत नहीं करता।',
   'engines returned by the API · lowest RUL first by default.': 'इंजन API से प्राप्त · डिफ़ॉल्ट रूप से सबसे कम RUL पहले।',
   'Search engine number': 'इंजन नंबर खोजें',
   'All tiers': 'सभी स्तर',
@@ -330,15 +330,15 @@ function readPreference(key, fallback, allowed) {
 }
 
 export function PreferencesProvider({ children }) {
-  const [theme, setTheme] = useState(() => readPreference('aeroguard-theme', 'light', ['light', 'dark']));
-  const [language, setLanguage] = useState(() => readPreference('aeroguard-language', 'en', ['en', 'hi']));
+  const [theme, setTheme] = useState(() => readPreference('nex-aero-theme', readPreference('aeroguard-theme', 'light', ['light', 'dark']), ['light', 'dark']));
+  const [language, setLanguage] = useState(() => readPreference('nex-aero-language', readPreference('aeroguard-language', 'en', ['en', 'hi']), ['en', 'hi']));
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.lang = language;
     try {
-      window.localStorage.setItem('aeroguard-theme', theme);
-      window.localStorage.setItem('aeroguard-language', language);
+      window.localStorage.setItem('nex-aero-theme', theme);
+      window.localStorage.setItem('nex-aero-language', language);
     } catch {
       // The selected preferences remain active for this session if storage is unavailable.
     }

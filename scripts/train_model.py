@@ -1,5 +1,5 @@
 """
-AeroGuard AI - Model Training & Evaluation Pipeline
+Nex Aero - Model Training & Evaluation Pipeline
 Trains a leak-free RandomForestRegressor on NASA C-MAPSS FD001.
 Evaluates with GroupKFold engine-wise cross-validation and official NASA test set.
 """
@@ -58,7 +58,7 @@ def train_and_evaluate(cap_rul: int = RUL_CAP_DEFAULT):
     os.makedirs(EVAL_DIR, exist_ok=True)
 
     print("=" * 60)
-    print("AeroGuard AI - Turbofan RUL Baseline Model Training")
+    print("Nex Aero - Turbofan RUL Baseline Model Training")
     print(f"Dataset: NASA C-MAPSS FD001 | Target Cap: {cap_rul} cycles")
     print("=" * 60)
 

@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 
 class Settings(BaseSettings):
-    PROJECT_NAME: str = "AeroGuard AI"
+    PROJECT_NAME: str = "Nex Aero"
     VERSION: str = "1.0.0"
     API_PREFIX: str = "/api"
     HOST: str = "0.0.0.0"

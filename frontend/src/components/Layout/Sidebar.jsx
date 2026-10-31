@@ -52,11 +52,11 @@ export default function Sidebar({ collapsed, onToggleCollapse }) {
         {!collapsed ? (
           <div className="flex items-center gap-2.5 overflow-hidden">
             <div className="w-6 h-6 rounded bg-[#1F2328] dark:bg-[#E6EDF3] text-white dark:text-[#0D1117] flex items-center justify-center font-mono font-bold text-xs shrink-0">
-              AG
+              NA
             </div>
             <div className="truncate">
               <span className="font-semibold text-sm tracking-tight text-[#1F2328] dark:text-[#E6EDF3] block leading-none">
-                AeroGuard AI
+                Nex Aero
               </span>
               <span className="text-[10px] text-[#656D76] dark:text-[#848D97] tracking-wider uppercase font-mono mt-1 block leading-none">
                 Turbofan Prognostics
@@ -65,7 +65,7 @@ export default function Sidebar({ collapsed, onToggleCollapse }) {
           </div>
         ) : (
           <div className="mx-auto w-7 h-7 rounded bg-[#1F2328] dark:bg-[#E6EDF3] text-white dark:text-[#0D1117] flex items-center justify-center font-mono font-bold text-xs">
-            AG
+            NA
           </div>
         )}
 

@@ -1,5 +1,5 @@
 """
-AeroGuard AI - ML Inference Engine
+Nex Aero - ML Inference Engine
 Loads serialized model pipeline and executes schema-validated predictions for Remaining Useful Life.
 Includes Isolation Forest anomaly detection and local sensor drift attribution.
 """
