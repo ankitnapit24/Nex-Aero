@@ -1,13 +1,22 @@
 import axios from 'axios';
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000').replace(/\/+$/, '');
+const configuredBaseUrl = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+const API_BASE_URL = configuredBaseUrl || (import.meta.env.DEV ? 'http://localhost:8000' : '');
+
+if (import.meta.env.PROD && !configuredBaseUrl) {
+  console.warn(
+    '[Nex Aero] Notice: VITE_API_BASE_URL environment variable is not defined. Production requests will use relative paths.'
+  );
+}
+
+const timeoutMs = Number(import.meta.env.VITE_API_TIMEOUT_MS) || 20000;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 10000,
+  timeout: timeoutMs,
 });
 
 export function getApiErrorMessage(error, fallback = 'The request could not be completed.') {
@@ -16,8 +25,8 @@ export function getApiErrorMessage(error, fallback = 'The request could not be c
   if (Array.isArray(detail)) {
     return detail.map((item) => item.msg).filter(Boolean).join(', ') || fallback;
   }
-  if (error?.code === 'ECONNABORTED') return 'The backend did not respond in time.';
-  if (error?.request && !error?.response) return 'Cannot reach the backend. Check that the API server is running.';
+  if (error?.code === 'ECONNABORTED') return 'The backend did not respond in time (timeout).';
+  if (error?.request && !error?.response) return 'Cannot reach the backend. Check that the API server is running and reachable.';
   return error?.message || fallback;
 }
 

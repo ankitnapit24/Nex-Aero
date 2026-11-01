@@ -1,25 +1,34 @@
-from fastapi import APIRouter
-import os
+from fastapi import APIRouter, Response, status
 from sqlalchemy import text
 from backend.app.core.config import settings
 from backend.app.database.session import SessionLocal
+from backend.app.services.engine_service import engine_service
+from ml.inference.predictor import RULPredictor
 
 router = APIRouter()
+_cached_predictor = None
+
+def get_predictor():
+    global _cached_predictor
+    if _cached_predictor is None:
+        try:
+            _cached_predictor = RULPredictor()
+        except Exception:
+            _cached_predictor = None
+    return _cached_predictor
 
 @router.get("/health")
 def get_health():
     """
-    Check backend health status, database connectivity, and ML model artifacts.
-    Returns overall system state: ONLINE, DEGRADED, or UNAVAILABLE.
+    Comprehensive health check: reports liveness, database status, ML models readiness, and dataset availability.
+    Overall system state: ONLINE, DEGRADED, or UNAVAILABLE.
     """
-    model_exists = os.path.exists(settings.MODEL_PATH)
-    metadata_exists = os.path.exists(settings.METADATA_PATH)
-    # Project root is 4 levels up from this file (routes -> api -> app -> backend -> root)
-    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", ".."))
-    anomaly_path = os.path.join(project_root, "ml", "models", "iforest_fd001.joblib")
-    anomaly_exists = os.path.exists(anomaly_path)
+    pred = get_predictor()
+    rf_model_loaded = pred is not None and pred.model is not None
+    anomaly_detector_loaded = pred is not None and pred.anomaly_model is not None
+    metadata_loaded = pred is not None and bool(pred.metadata)
 
-    # Database connectivity check
+    # Check database connectivity via live query
     db_ok = False
     try:
         db = SessionLocal()
@@ -29,10 +38,13 @@ def get_health():
     except Exception:
         db_ok = False
 
+    # Check dataset availability
+    dataset_ready = engine_service.test_df is not None and not engine_service.test_df.empty
+
     # Determine overall system state
-    if model_exists and db_ok and anomaly_exists:
+    if rf_model_loaded and db_ok and anomaly_detector_loaded and dataset_ready:
         system_state = "ONLINE"
-    elif model_exists and db_ok:
+    elif rf_model_loaded and db_ok:
         system_state = "DEGRADED"
     else:
         system_state = "UNAVAILABLE"
@@ -42,10 +54,50 @@ def get_health():
         "system_state": system_state,
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
-        "model_loaded": model_exists,
-        "metadata_loaded": metadata_exists,
+        "model_loaded": rf_model_loaded,
+        "metadata_loaded": metadata_loaded,
         "database_status": "CONNECTED" if db_ok else "UNAVAILABLE",
-        "rul_model_status": "LOADED" if model_exists else "UNAVAILABLE",
-        "anomaly_detector_status": "LOADED" if anomaly_exists else "DEGRADED",
+        "rul_model_status": "LOADED" if rf_model_loaded else "UNAVAILABLE",
+        "anomaly_detector_status": "LOADED" if anomaly_detector_loaded else "DEGRADED",
+        "dataset_ready": dataset_ready,
         "disclaimer": "Experimental decision-support prototype. Outputs do NOT certify airworthiness or authorize maintenance."
+    }
+
+@router.get("/health/live")
+def get_liveness():
+    """
+    Liveness probe: verifies that the FastAPI process is responsive.
+    """
+    return {
+        "status": "alive",
+        "service": settings.PROJECT_NAME,
+        "version": settings.VERSION
+    }
+
+@router.get("/health/ready")
+def get_readiness(response: Response = None):
+    """
+    Readiness probe: verifies the service is ready to accept incoming traffic (DB responsive & RF model loaded).
+    Returns HTTP 200 if ready, HTTP 503 if unavailable.
+    """
+    pred = get_predictor()
+    rf_model_loaded = pred is not None and pred.model is not None
+
+    db_ok = False
+    try:
+        db = SessionLocal()
+        db.execute(text("SELECT 1"))
+        db.close()
+        db_ok = True
+    except Exception:
+        db_ok = False
+
+    is_ready = rf_model_loaded and db_ok
+    if not is_ready and response is not None:
+        response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+
+    return {
+        "ready": is_ready,
+        "database": "CONNECTED" if db_ok else "UNAVAILABLE",
+        "rul_model": "LOADED" if rf_model_loaded else "UNAVAILABLE",
     }

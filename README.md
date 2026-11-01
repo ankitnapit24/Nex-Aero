@@ -6,31 +6,63 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646cff.svg)](https://vite.dev)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38bdf8.svg)](https://tailwindcss.com)
 [![NASA C-MAPSS](https://img.shields.io/badge/NASA%20Data-C--MAPSS%20FD001-orange.svg)](https://data.nasa.gov)
+[![Deploy to Render](https://img.shields.io/badge/Deploy-Render-46E3B7.svg)](https://render.com)
+[![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel-black.svg)](https://vercel.com)
 
 Nex Aero is an enterprise-grade, leak-free machine-learning aviation reliability platform designed to estimate Remaining Useful Life (RUL) and detect sensor anomalies in commercial turbofan aircraft engines based on the NASA C-MAPSS FD001 dataset.
 
-> **DEMO & RESEARCH PROTOTYPE DISCLAIMER:**
-> This software is an experimental decision-support prototype. Outputs do **NOT** certify aircraft airworthiness, diagnose real-world flight hardware, or autonomously authorize maintenance actions without certified human engineering approval according to applicable maintenance manuals
+> **DEMO & RESEARCH PROTOTYPE DISCLAIMER:**  
+> This software is an experimental decision-support prototype. Outputs do **NOT** certify aircraft airworthiness, diagnose real-world flight hardware, or autonomously authorize maintenance actions without certified human engineering approval according to applicable maintenance manuals.
 
 ---
 
-## Architecture Overview
+## Cloud Deployment Architecture
 
 ```mermaid
-flowchart LR
-    A["NASA C-MAPSS FD001"] --> B["Data Pipeline & GroupKFold Split"]
-    B --> C["RandomForest RUL Predictor (120 Trees)"]
-    B --> D["IsolationForest Anomaly Detector"]
-    C --> E["TreeSHAP Local Explainability Engine"]
-    C --> F["FastAPI REST Backend & SQLite"]
-    D --> F
-    E --> F
-    F --> G["React 19 Enterprise Interface"]
+flowchart TD
+    subgraph Client["Client Browser"]
+        UI["React 19 + Tailwind CSS Dashboard"]
+    end
+
+    subgraph Vercel["Frontend Hosting (Vercel)"]
+        SPA["Vite Static Build (dist/)"]
+        Rewrites["SPA Route Rewrites (vercel.json)"]
+    end
+
+    subgraph Render["Backend API (Render Web Service)"]
+        FastAPI["FastAPI 0.110+ on Python 3.11"]
+        Probes["Liveness & Readiness Probes (/api/health)"]
+        Inference["RUL Predictor + Isolation Forest"]
+        SHAP["TreeSHAP Explainability Engine"]
+    end
+
+    subgraph Persistence["Storage & Data Layer"]
+        Disk["Render Persistent Disk (/var/data)"]
+        DB["SQLite (nex_aero.db)"]
+        Dataset["NASA C-MAPSS FD001 (data/raw/)"]
+        Models["Model Artifacts (ml/models/)"]
+    end
+
+    UI -->|HTTPS Requests| SPA
+    SPA -->|VITE_API_BASE_URL| FastAPI
+    FastAPI --> Probes
+    FastAPI --> Inference
+    FastAPI --> SHAP
+    FastAPI --> DB
+    Disk --> DB
+    Inference --> Models
+    FastAPI --> Dataset
 ```
 
-- **Supervised Prognostics:** Scikit-learn `RandomForestRegressor` (120 estimators) trained with engine-wise `GroupKFold` cross-validation (strict zero-leakage guarantee across engine units).
-- **Unsupervised Anomaly Surveillance:** `IsolationForest` trained on 3,000 nominal early cycles across strictly physical sensors (excluding cycle, engine ID, and RUL to eliminate age bias).
-- **Model Explainability:** Exact game-theoretic `TreeSHAP` local feature attributions and global Gini feature importance rankings.
+For complete cloud deployment instructions, see the [Production Cloud Deployment Guide](docs/deployment-guide.md) and the [Pre-Deployment Audit Matrix](docs/deployment-audit.md).
+
+---
+
+## Key Capabilities
+
+- **Supervised Prognostics:** Scikit-learn `RandomForestRegressor` (100 estimators) trained with engine-wise `GroupKFold` cross-validation (strict zero-leakage guarantee across engine units).
+- **Unsupervised Anomaly Surveillance:** `IsolationForest` trained on nominal early cycles across strictly physical sensors (excluding cycle, engine ID, and RUL to eliminate age bias).
+- **Local & Global Explainability:** Exact game-theoretic `TreeSHAP` local feature attributions and global Gini feature importance rankings.
 - **Workflow & Persistence:** FastAPI REST API with SQLite database supporting audit logging and persistent maintenance triage alerts (`OPEN` -> `ACKNOWLEDGED` -> `RESOLVED`).
 - **Enterprise Design System:** GitHub/Linear-inspired neutral theme supporting persistent light/dark modes and English/Hindi language selection, with accessible typography, compact tables, and responsive cards.
 
@@ -50,14 +82,14 @@ flowchart LR
 
 ---
 
-## Quick Start Guide
+## Local Development Quickstart
 
 ### Prerequisites
 - Python 3.11+ (verified up to Python 3.14)
 - Node.js 18+ (verified on Node 24 LTS)
 - Git
 
-### 1. Setup Environment
+### 1. Setup Backend
 ```bash
 # Clone the repository
 git clone https://github.com/ankitnapit24/Nex-Aero.git
@@ -72,80 +104,106 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Install backend dependencies
+pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-### 2. Download Dataset & Train Models
-```bash
-# 1. Download NASA C-MAPSS FD001 data files into data/raw/
-python scripts/download_dataset.py
+# Automated deployment preparation (downloads NASA dataset, trains models, validates artifacts)
+python scripts/prepare_deployment.py
 
-# 2. Preprocess data and generate ground-truth labels
-python scripts/prepare_dataset.py
-
-# 3. Train leak-free RandomForest pipeline & evaluate on test fleet
-python scripts/train_model.py
-
-# 4. Train unsupervised Isolation Forest anomaly detector
-python scripts/train_anomaly_detector.py
-```
-
-### 3. Run Automated Tests
-```bash
-pytest tests/ -v
-```
-
-### 4. Start the Application
-
-#### Start Backend (Terminal 1)
-```bash
-# Windows PowerShell:
-$env:PYTHONPATH = "$PWD"
-.\.venv\Scripts\uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
-
-# macOS/Linux:
-export PYTHONPATH="$PWD"
-uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
+# Start local FastAPI server
+python -m uvicorn backend.app.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 Interactive Swagger API documentation: [http://localhost:8000/docs](http://localhost:8000/docs)
 
-#### Start Frontend (Terminal 2)
+### 2. Setup Frontend
 ```bash
+# In a new terminal window:
 cd frontend
 npm install
 npm run dev
 ```
 Open your browser to: [http://localhost:5173](http://localhost:5173)
 
+### 3. Run Automated Tests
+```bash
+# Backend unit & integration tests
+pytest tests/ -v
+
+# End-to-end smoke test suite (against deployed backend or local)
+python scripts/deployment_smoke_test.py --url http://127.0.0.1:8000
+```
+
 ---
 
-## Demo Walkthrough
+## Production Cloud Deployment (Vercel + Render)
 
-1. **Fleet Health Overview (`/`):**
-   - View all 100 test turbofan engines prioritized by urgency (lowest RUL first).
-   - Filter by urgency tier (Critical: RUL ≤ 25c, Warning: 25-50c, Moderate: 50-80c, Nominal: >80c).
-   - Verify NASA ground truth comparisons (`ENG-034` predicted 7.1 cycles vs NASA ground truth 7.0 cycles).
+### Backend on Render
+1. Create a new **Web Service** or use the included `render.yaml` Blueprint.
+2. **Build Command:** `pip install --upgrade pip && pip install -r requirements.txt && python scripts/prepare_deployment.py`
+3. **Start Command:** `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
+4. **Environment Variables:**
+   - `PYTHON_VERSION`: `3.11.10`
+   - `PYTHONPATH`: `.`
+   - `DATABASE_URL`: `sqlite:////var/data/nex_aero.db`
+   - `CORS_ORIGINS`: `https://your-app.vercel.app,http://localhost:5173`
+5. **Attach Persistent Disk:** Mount path `/var/data` (1 GB).
 
-2. **Sensor Telemetry & Historical Degradation Replay (`/engines/34`):**
-   - Inspect historical multi-channel degradation trends (LPC/HPC/LPT temperatures, HPC pressure, rotor speeds).
-   - Use simulated historical playback player with play/pause/scrub controls to inspect step-by-step wear evolution.
+### Frontend on Vercel
+1. Import repository `ankitnapit24/Nex-Aero`.
+2. **Root Directory:** `frontend`
+3. **Framework Preset:** `Vite`
+4. **Environment Variables:**
+   - `VITE_API_BASE_URL`: `https://nex-aero-api.onrender.com`
 
-3. **Real-Time ML Inference Simulator (`/predictions`):**
-   - Select an engine to populate authentic sensor readings.
-   - Run inference to get instant RUL estimation and anomaly classification.
-   - Click **Calculate Local TreeSHAP Attributions** to view exact feature contribution bars.
+---
 
-4. **Unsupervised Anomaly Surveillance (`/anomalies`):**
-   - Inspect fleet-wide Isolation Forest anomaly scores evaluated strictly on physical parameters.
-   - Filter by anomalous units and drill down to inspect sensor drifts.
+## Project Structure
 
-5. **Maintenance Triage & Review Queue (`/maintenance`):**
-   - Review persistent SQLite maintenance alerts.
-   - Transition alert status between Open, Acknowledged, and Resolved with persistent state.
-   - Review draft work orders with review-oriented advisory protocols.
-
-6. **Model Transparency & SHAP Analytics (`/analytics`):**
-   - Inspect global Gini feature weights, zero-leakage cross-validation methodology, and interactive TreeSHAP explainability inspector.
+```
+Nex-Aero/
+├── .github/
+│   └── workflows/
+│       └── ci.yml               # Automated CI test & build workflow
+├── backend/
+│   ├── app/
+│   │   ├── api/routes/          # health, engine, prediction, alert routes
+│   │   ├── core/config.py       # Pydantic environment settings & CORS validator
+│   │   ├── database/            # SQLAlchemy session & SQLite models
+│   │   ├── schemas/             # Pydantic schemas for requests/responses
+│   │   ├── services/            # EngineService telemetry catalog
+│   │   └── main.py              # FastAPI app & lifespan handlers
+│   ├── .env.example
+│   └── requirements.txt
+├── frontend/
+│   ├── src/                     # React components, pages, services, design tokens
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── vercel.json              # SPA route rewrites for Vercel
+│   └── .env.example
+├── ml/
+│   ├── config.py                # Sensor definitions & feature lists
+│   ├── data_processing/         # C-MAPSS dataset loaders & RUL calculators
+│   ├── inference/               # RULPredictor & SHAPExplainer
+│   └── models/                  # Joblib pipelines & JSON metadata
+├── data/
+│   ├── raw/                     # NASA C-MAPSS FD001 text files
+│   └── processed/               # Clean tabular CSV artifacts
+├── scripts/
+│   ├── download_dataset.py      # Automated dataset downloader & validator
+│   ├── prepare_dataset.py       # Tabular preprocessing & RUL capping
+│   ├── train_model.py           # Leak-free Random Forest training pipeline
+│   ├── train_anomaly_detector.py # Isolation Forest sensor anomaly training
+│   ├── prepare_deployment.py    # Master idempotent cloud build orchestrator
+│   └── deployment_smoke_test.py # Live cloud deployment verification suite
+├── tests/                       # Pytest test suite (19 test cases)
+├── docs/
+│   ├── deployment-audit.md      # Pre-deployment engineering audit
+│   └── deployment-guide.md      # Step-by-step production deployment guide
+├── render.yaml                  # Render Blueprint definition
+├── vercel.json                  # Root Vercel SPA configuration
+├── requirements.txt             # Root Python dependencies
+└── README.md
+```
 
 ---
 

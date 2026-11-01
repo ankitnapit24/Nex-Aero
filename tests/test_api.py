@@ -196,3 +196,63 @@ def test_alerts_lifecycle(db):
     resolved = update_alert_status(new_alert.id, AlertUpdate(status="RESOLVED"), db=db)
     assert resolved.status == "RESOLVED"
     assert resolved.resolved_at is not None
+
+def test_health_live_and_ready():
+    from backend.app.api.routes.health import get_liveness, get_readiness
+    live = get_liveness()
+    assert live["status"] == "alive"
+    assert live["service"] == "Nex Aero"
+
+    ready = get_readiness()
+    assert ready["ready"] is True
+    assert ready["database"] == "CONNECTED"
+    assert ready["rul_model"] == "LOADED"
+
+def test_cors_origins_parsing():
+    from backend.app.core.config import Settings
+    # Test comma-separated string parsing
+    s1 = Settings(CORS_ORIGINS="https://nex-aero.vercel.app, http://localhost:5173")
+    assert s1.CORS_ORIGINS == ["https://nex-aero.vercel.app", "http://localhost:5173"]
+
+    # Test JSON array parsing
+    s2 = Settings(CORS_ORIGINS='["https://nex-aero.vercel.app", "http://localhost:3000"]')
+    assert s2.CORS_ORIGINS == ["https://nex-aero.vercel.app", "http://localhost:3000"]
+
+    # Test list passthrough
+    s3 = Settings(CORS_ORIGINS=["https://example.com"])
+    assert s3.CORS_ORIGINS == ["https://example.com"]
+
+def test_sqlite_persistence_across_sessions():
+    from backend.app.database.session import SessionLocal
+    from backend.app.database.models import PredictionLog
+    import datetime
+
+    # Insert in one session
+    session1 = SessionLocal()
+    unique_engine_id = 8888
+    record = PredictionLog(
+        engine_id=unique_engine_id,
+        cycle=50,
+        predicted_rul=75.5,
+        raw_rul=75.5,
+        urgency_tier="MODERATE",
+        recommendation="Test persistence record",
+        model_version="1.0.0",
+        created_at=datetime.datetime.now(datetime.timezone.utc)
+    )
+    session1.add(record)
+    session1.commit()
+    inserted_id = record.id
+    session1.close()
+
+    # Query in a fresh session
+    session2 = SessionLocal()
+    fetched = session2.query(PredictionLog).filter(PredictionLog.id == inserted_id).first()
+    assert fetched is not None
+    assert fetched.engine_id == unique_engine_id
+    assert fetched.predicted_rul == 75.5
+
+    # Clean up test record
+    session2.delete(fetched)
+    session2.commit()
+    session2.close()
