@@ -24,9 +24,15 @@ wheels/
 .installed.cfg
 *.egg
 
-# Data & Models (Keep large raw datasets & model artifacts out of git unless needed)
+# Data & Models
+# Keep large bulk archive and other subsets (FD002/3/4) out of git,
+# but include the official NASA FD001 dataset text files so cloud builds have them immediately.
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/train_FD001.txt
+!data/raw/test_FD001.txt
+!data/raw/RUL_FD001.txt
+!data/raw/readme.txt
 data/processed/*
 !data/processed/.gitkeep
 ml/models/*.joblib

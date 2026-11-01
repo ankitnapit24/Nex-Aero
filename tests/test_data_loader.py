@@ -68,3 +68,17 @@ def test_raw_dataset_integrity():
     # Verify ground-truth RUL count
     assert len(test_rul) == 100
     assert (test_rul > 0).all(), "All test RUL targets must be positive"
+
+def test_all_four_fd001_files_present_and_verified():
+    """Verify that train_FD001.txt, test_FD001.txt, RUL_FD001.txt, and readme.txt are verified."""
+    from scripts.download_dataset import verify_fd001_files, FD001_SPECS
+    assert verify_fd001_files(RAW_DIR, verbose=False) is True
+
+    # Check each individual file explicitly
+    for filename, specs in FD001_SPECS.items():
+        path = os.path.join(RAW_DIR, filename)
+        assert os.path.isfile(path), f"File {filename} is missing"
+        assert os.path.getsize(path) >= specs["min_bytes"], f"File {filename} size too small"
+        with open(path, "r", encoding="utf-8", errors="ignore") as f:
+            lines = sum(1 for _ in f)
+        assert lines >= specs["min_lines"], f"File {filename} has fewer lines ({lines}) than expected ({specs['min_lines']})"

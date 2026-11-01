@@ -20,7 +20,7 @@ RAW_DATA_DIR = os.path.join(BASE_DIR, "data", "raw")
 PROCESSED_DATA_DIR = os.path.join(BASE_DIR, "data", "processed")
 MODELS_DIR = os.path.join(BASE_DIR, "ml", "models")
 
-REQUIRED_RAW_FILES = ["train_FD001.txt", "test_FD001.txt", "RUL_FD001.txt"]
+REQUIRED_RAW_FILES = ["train_FD001.txt", "test_FD001.txt", "RUL_FD001.txt", "readme.txt"]
 REQUIRED_PROCESSED_FILES = ["train_fd001.csv", "test_fd001.csv", "test_rul_fd001.csv"]
 REQUIRED_MODEL_FILES = [
     "rf_fd001_pipeline.joblib",
@@ -43,16 +43,16 @@ def step_dataset(force: bool = False):
     print("\n[Step 1/5] Checking NASA C-MAPSS FD001 Dataset Availability...")
     os.makedirs(RAW_DATA_DIR, exist_ok=True)
     
-    raw_ready = check_files_exist(RAW_DATA_DIR, REQUIRED_RAW_FILES)
+    from scripts.download_dataset import verify_fd001_files, download_and_extract
+    raw_ready = verify_fd001_files(RAW_DATA_DIR, verbose=False)
     if not raw_ready or force:
-        print("Raw dataset files missing or incomplete. Initiating automated download...")
-        from scripts.download_dataset import download_and_extract
-        success = download_and_extract()
-        if not success or not check_files_exist(RAW_DATA_DIR, REQUIRED_RAW_FILES):
-            raise RuntimeError("CRITICAL: Failed to download or verify NASA C-MAPSS FD001 dataset.")
-        print("[OK] Dataset downloaded and verified in data/raw/.")
+        print("Raw dataset files missing or incomplete. Initiating automated acquisition...")
+        success = download_and_extract(RAW_DATA_DIR)
+        if not success or not verify_fd001_files(RAW_DATA_DIR, verbose=False):
+            raise RuntimeError("CRITICAL: Failed to acquire or verify NASA C-MAPSS FD001 dataset.")
+        print("[OK] Dataset acquired and verified in data/raw/.")
     else:
-        print("[OK] Raw FD001 dataset already present and verified.")
+        print("[OK] All 4 required FD001 files are already present and verified in data/raw/.")
 
 
 def step_preprocess(force: bool = False):
