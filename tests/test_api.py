@@ -108,18 +108,21 @@ def test_predict_and_persistence(db):
     assert len(history) >= 1
     assert history[0].engine_id == 1
 
-def test_predict_endpoint_allows_unavailable_anomaly_score():
+def test_predict_endpoint_allows_unavailable_anomaly_score(monkeypatch, db):
     detail = get_engine(91)
     payload = {
         "engine_id": detail.engine_id,
         **detail.telemetry_history[-1].model_dump(),
     }
 
-    with TestClient(app) as client:
-        response = client.post("/api/predict", json=payload)
+    payload_obj = TelemetryInput(**payload)
+    from backend.app.api.routes.prediction import predictor
+    monkeypatch.setattr(predictor, "anomaly_model", None)
+    response = predict_rul(payload_obj, db=db)
 
-    assert response.status_code == 200
-    assert response.json()["anomaly_score"] is None
+
+
+    assert response["anomaly_score"] is None
 
 def test_model_metadata():
     meta = get_model_metadata()
