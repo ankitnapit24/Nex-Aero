@@ -9,7 +9,8 @@ if (import.meta.env.PROD && !configuredBaseUrl) {
   );
 }
 
-const timeoutMs = Number(import.meta.env.VITE_API_TIMEOUT_MS) || 20000;
+// 45s default timeout allows Render Free tier instances sufficient time to wake from idle spin-down
+const timeoutMs = Number(import.meta.env.VITE_API_TIMEOUT_MS) || 45000;
 
 const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -25,31 +26,51 @@ export function getApiErrorMessage(error, fallback = 'The request could not be c
   if (Array.isArray(detail)) {
     return detail.map((item) => item.msg).filter(Boolean).join(', ') || fallback;
   }
-  if (error?.code === 'ECONNABORTED') return 'The backend did not respond in time (timeout).';
-  if (error?.request && !error?.response) return 'Cannot reach the backend. Check that the API server is running and reachable.';
+  const status = error?.response?.status;
+  if (status === 502 || status === 503 || error?.code === 'ECONNABORTED') {
+    return 'Nex Aero backend is waking up. On free hosting, Render may take up to a minute to spin up from sleep. Please wait a moment and retry.';
+  }
+  if (error?.request && !error?.response) {
+    return 'Nex Aero backend is waking up or temporarily unreachable. Free instances spin down during inactivity; please allow ~45s for cold start.';
+  }
   return error?.message || fallback;
+}
+
+// Helper for idempotent GET requests to retry once if backend was spinning up (502/503)
+async function safeGetWithRetry(url, config = {}, retries = 1) {
+  try {
+    return await apiClient.get(url, config);
+  } catch (error) {
+    const status = error?.response?.status;
+    const isColdStart = status === 502 || status === 503 || error?.code === 'ECONNABORTED';
+    if (retries > 0 && isColdStart) {
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return await apiClient.get(url, config);
+    }
+    throw error;
+  }
 }
 
 export const api = {
   // Health & diagnostics
   getHealth: async () => {
-    const res = await apiClient.get('/api/health');
+    const res = await safeGetWithRetry('/api/health');
     return res.data;
   },
 
   // Engine fleet catalog
   getEngines: async () => {
-    const res = await apiClient.get('/api/engines');
+    const res = await safeGetWithRetry('/api/engines');
     return res.data;
   },
 
   // Single engine telemetry
   getEngine: async (engineId) => {
-    const res = await apiClient.get(`/api/engines/${engineId}`);
+    const res = await safeGetWithRetry(`/api/engines/${engineId}`);
     return res.data;
   },
 
-  // Real-time ML inference
+  // Real-time ML inference (strictly NO automated retries on mutations to prevent duplicate inferences)
   predictRul: async (payload) => {
     const res = await apiClient.post('/api/predict', payload);
     return res.data;
@@ -57,12 +78,12 @@ export const api = {
 
   // Historical inference audit logs
   getPredictions: async (limit = 50) => {
-    const res = await apiClient.get(`/api/predictions?limit=${limit}`);
+    const res = await safeGetWithRetry(`/api/predictions?limit=${limit}`);
     return res.data;
   },
 
   getModelMetadata: async () => {
-    const res = await apiClient.get('/api/model-metadata');
+    const res = await safeGetWithRetry('/api/model-metadata');
     return res.data;
   },
 
@@ -71,21 +92,21 @@ export const api = {
     const res = await apiClient.post(
       `/api/demo/replay?engine_id=${engineId}&sample_stride=${sampleStride}`,
       null,
-      { timeout: 60000 },
+      { timeout: 75000 },
     );
     return res.data;
   },
 
   // Unsupervised anomaly detection
   getAnomalies: async (params = {}) => {
-    const res = await apiClient.get('/api/anomalies', { params });
+    const res = await safeGetWithRetry('/api/anomalies', { params });
     return res.data;
   },
 
   // TreeSHAP local explainability
   getExplain: async (engineId, cycle = null) => {
     const url = cycle ? `/api/explain/${engineId}?cycle=${cycle}` : `/api/explain/${engineId}`;
-    const res = await apiClient.get(url);
+    const res = await safeGetWithRetry(url);
     return res.data;
   },
 
@@ -97,7 +118,7 @@ export const api = {
 
   // Persistent maintenance alerts
   getAlerts: async (params = {}) => {
-    const res = await apiClient.get('/api/alerts', { params });
+    const res = await safeGetWithRetry('/api/alerts', { params });
     return res.data;
   },
 

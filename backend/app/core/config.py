@@ -17,7 +17,7 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5174",
         "http://localhost:3000",
     ]
-    DATABASE_URL: str = "sqlite:///./aeroguard.db"
+    DATABASE_URL: str = "sqlite:///./data/nex_aero.db"
     
     # Model configuration
     MODEL_PATH: str = os.path.join("ml", "models", "rf_fd001_pipeline.joblib")

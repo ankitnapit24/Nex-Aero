@@ -6,8 +6,8 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646cff.svg)](https://vite.dev)
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38bdf8.svg)](https://tailwindcss.com)
 [![NASA C-MAPSS](https://img.shields.io/badge/NASA%20Data-C--MAPSS%20FD001-orange.svg)](https://data.nasa.gov)
-[![Deploy to Render](https://img.shields.io/badge/Deploy-Render-46E3B7.svg)](https://render.com)
-[![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel-black.svg)](https://vercel.com)
+[![Deploy to Render](https://img.shields.io/badge/Deploy-Render%20Free-46E3B7.svg)](https://render.com)
+[![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel%20Hobby-black.svg)](https://vercel.com)
 
 Nex Aero is an enterprise-grade, leak-free machine-learning aviation reliability platform designed to estimate Remaining Useful Life (RUL) and detect sensor anomalies in commercial turbofan aircraft engines based on the NASA C-MAPSS FD001 dataset.
 
@@ -16,7 +16,7 @@ Nex Aero is an enterprise-grade, leak-free machine-learning aviation reliability
 
 ---
 
-## Cloud Deployment Architecture
+## 100% Free-Tier Cloud Deployment Architecture
 
 ```mermaid
 flowchart TD
@@ -24,21 +24,20 @@ flowchart TD
         UI["React 19 + Tailwind CSS Dashboard"]
     end
 
-    subgraph Vercel["Frontend Hosting (Vercel)"]
+    subgraph Vercel["Frontend Hosting (Vercel Hobby — Free)"]
         SPA["Vite Static Build (dist/)"]
         Rewrites["SPA Route Rewrites (vercel.json)"]
     end
 
-    subgraph Render["Backend API (Render Web Service)"]
-        FastAPI["FastAPI 0.110+ on Python 3.11"]
+    subgraph Render["Backend API (Render Free Web Service)"]
+        FastAPI["FastAPI 0.110+ on Python 3.11 (plan: free)"]
         Probes["Liveness & Readiness Probes (/api/health)"]
         Inference["RUL Predictor + Isolation Forest"]
         SHAP["TreeSHAP Explainability Engine"]
     end
 
-    subgraph Persistence["Storage & Data Layer"]
-        Disk["Render Persistent Disk (/var/data)"]
-        DB["SQLite (nex_aero.db)"]
+    subgraph Persistence["Storage & Data Layer (Zero-Cost Ephemeral)"]
+        DB["Local SQLite (data/nex_aero.db)"]
         Dataset["NASA C-MAPSS FD001 (data/raw/)"]
         Models["Model Artifacts (ml/models/)"]
     end
@@ -49,12 +48,14 @@ flowchart TD
     FastAPI --> Inference
     FastAPI --> SHAP
     FastAPI --> DB
-    Disk --> DB
     Inference --> Models
     FastAPI --> Dataset
 ```
 
-For complete cloud deployment instructions, see the [Production Cloud Deployment Guide](docs/deployment-guide.md) and the [Pre-Deployment Audit Matrix](docs/deployment-audit.md).
+For complete documentation:
+- [Free-Tier Deployment Guide](docs/deployment-guide.md)
+- [Free-Tier Infrastructure & Limitations](docs/free-tier-limitations.md)
+- [Pre-Deployment Audit Matrix](docs/free-deployment-audit.md)
 
 ---
 
@@ -63,7 +64,7 @@ For complete cloud deployment instructions, see the [Production Cloud Deployment
 - **Supervised Prognostics:** Scikit-learn `RandomForestRegressor` (100 estimators) trained with engine-wise `GroupKFold` cross-validation (strict zero-leakage guarantee across engine units).
 - **Unsupervised Anomaly Surveillance:** `IsolationForest` trained on nominal early cycles across strictly physical sensors (excluding cycle, engine ID, and RUL to eliminate age bias).
 - **Local & Global Explainability:** Exact game-theoretic `TreeSHAP` local feature attributions and global Gini feature importance rankings.
-- **Workflow & Persistence:** FastAPI REST API with SQLite database supporting audit logging and persistent maintenance triage alerts (`OPEN` -> `ACKNOWLEDGED` -> `RESOLVED`).
+- **Workflow & Persistence:** FastAPI REST API with SQLite database supporting audit logging and maintenance triage alerts (`OPEN` -> `ACKNOWLEDGED` -> `RESOLVED`).
 - **Enterprise Design System:** GitHub/Linear-inspired neutral theme supporting persistent light/dark modes and English/Hindi language selection, with accessible typography, compact tables, and responsive cards.
 
 ---
@@ -135,25 +136,29 @@ python scripts/deployment_smoke_test.py --url http://127.0.0.1:8000
 
 ---
 
-## Production Cloud Deployment (Vercel + Render)
+## 100% Free Cloud Deployment (Zero Payment / No Credit Card)
 
-### Backend on Render
-1. Create a new **Web Service** or use the included `render.yaml` Blueprint.
-2. **Build Command:** `pip install --upgrade pip && pip install -r requirements.txt && python scripts/prepare_deployment.py`
-3. **Start Command:** `uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT`
-4. **Environment Variables:**
-   - `PYTHON_VERSION`: `3.11.10`
-   - `PYTHONPATH`: `.`
-   - `DATABASE_URL`: `sqlite:////var/data/nex_aero.db`
-   - `CORS_ORIGINS`: `https://your-app.vercel.app,http://localhost:5173`
-5. **Attach Persistent Disk:** Mount path `/var/data` (1 GB).
+### 1. Deploy Backend on Render Free
+1. Go to [dashboard.render.com](https://dashboard.render.com/) and click **New +** -> **Blueprint**.
+2. Select your repository `ankitnapit24/Nex-Aero`.
+3. Render auto-reads `render.yaml` with **Plan: Free** and **Zero Paid Disks**.
+4. Click **Apply**.
+5. Wait for the build to complete and copy your public service URL (`https://nex-aero-api.onrender.com`).
 
-### Frontend on Vercel
-1. Import repository `ankitnapit24/Nex-Aero`.
-2. **Root Directory:** `frontend`
-3. **Framework Preset:** `Vite`
-4. **Environment Variables:**
+### 2. Deploy Frontend on Vercel Hobby (Free)
+1. Go to [vercel.com](https://vercel.com/) and click **Add New...** -> **Project**.
+2. Import repository `ankitnapit24/Nex-Aero`.
+3. Set **Root Directory** to `frontend`.
+4. Add Environment Variable:
    - `VITE_API_BASE_URL`: `https://nex-aero-api.onrender.com`
+   - `VITE_API_TIMEOUT_MS`: `45000`
+5. Click **Deploy**.
+
+### 3. Link CORS
+In Render Dashboard -> `nex-aero-api` -> **Environment**, update `CORS_ORIGINS`:
+```env
+CORS_ORIGINS=https://your-app.vercel.app,http://localhost:5173
+```
 
 ---
 
@@ -195,11 +200,12 @@ Nex-Aero/
 │   ├── train_anomaly_detector.py # Isolation Forest sensor anomaly training
 │   ├── prepare_deployment.py    # Master idempotent cloud build orchestrator
 │   └── deployment_smoke_test.py # Live cloud deployment verification suite
-├── tests/                       # Pytest test suite (19 test cases)
+├── tests/                       # Pytest test suite (20 test cases)
 ├── docs/
-│   ├── deployment-audit.md      # Pre-deployment engineering audit
-│   └── deployment-guide.md      # Step-by-step production deployment guide
-├── render.yaml                  # Render Blueprint definition
+│   ├── free-deployment-audit.md # Free-tier conversion audit & paid removal
+│   ├── free-tier-limitations.md # Free-tier cloud infrastructure limitations
+│   └── deployment-guide.md      # Step-by-step free-tier deployment guide
+├── render.yaml                  # Render Free Blueprint (plan: free, no paid disks)
 ├── vercel.json                  # Root Vercel SPA configuration
 ├── requirements.txt             # Root Python dependencies
 └── README.md

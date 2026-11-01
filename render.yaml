@@ -2,20 +2,17 @@ services:
   - type: web
     name: nex-aero-api
     runtime: python
+    plan: free
+    branch: main
     buildCommand: "pip install --upgrade pip && pip install -r requirements.txt && python scripts/prepare_deployment.py"
     startCommand: "uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api/health
-    plan: starter
-    disk:
-      name: nex-aero-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.10
       - key: PYTHONPATH
         value: .
       - key: DATABASE_URL
-        value: sqlite:////var/data/nex_aero.db
+        value: sqlite:///./data/nex_aero.db
       - key: CORS_ORIGINS
         value: https://nex-aero.vercel.app,http://localhost:5173,http://localhost:3000

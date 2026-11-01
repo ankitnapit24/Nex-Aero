@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Activity, ArrowUpRight, Languages, Menu, Moon, Sun, X } from 'lucide-react';
+import { Activity, ArrowUpRight, Languages, Menu, Moon, Sun, X, Info } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../../services/api';
 import { usePreferences } from '../../i18n/Preferences';
@@ -51,9 +51,9 @@ export default function AppShell({ children }) {
 
   const closeMenu = () => setMenuOpen(false);
   const healthLabel = t(health.state === 'checking'
-    ? 'Checking system'
+    ? 'Checking backend...'
     : health.state === 'offline'
-      ? 'Backend unavailable'
+      ? 'Backend waking up (free tier)...'
       : health.modelLoaded
         ? 'Model ready'
         : 'Model unavailable');
@@ -116,8 +116,13 @@ export default function AppShell({ children }) {
       </header>
       <main className="main-content">{children}</main>
       <footer className="site-footer">
-        <span>Nex Aero · NASA C-MAPSS FD001</span>
-        <span>{t('Research prototype · Not for flight operations')}</span>
+        <div className="flex flex-col sm:flex-row items-center justify-between w-full gap-2 text-xs">
+          <span>Nex Aero · NASA C-MAPSS FD001</span>
+          <span className="text-muted-foreground text-center">
+            Free hosting uses temporary database storage. Demo history and alert records may reset after a service restart or redeployment.
+          </span>
+          <span>{t('Research prototype · Not for flight operations')}</span>
+        </div>
       </footer>
     </div>
   );
