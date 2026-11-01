@@ -81,7 +81,7 @@ For complete documentation:
 | | Test $R^2$ | **0.821** |
 | | NASA Asymmetric Penalty | **500.0** |
 
----
+----
 
 ## Local Development Quickstart
 
