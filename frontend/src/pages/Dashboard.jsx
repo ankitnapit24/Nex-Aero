@@ -4,6 +4,7 @@ import { ArrowRight, ChevronRight } from 'lucide-react';
 import api, { getApiErrorMessage } from '../services/api';
 import { formatEngine, formatRul, formatTimestamp, PageHeading, Panel, PanelHeading, RiskBadge, StateBlock } from '../components/UI/Shared';
 import { usePreferences } from '../i18n/Preferences';
+import EngineHealthDiagnosis from '../components/Dashboard/EngineHealthDiagnosis';
 
 export default function Dashboard() {
   const { t } = usePreferences();
@@ -39,6 +40,7 @@ export default function Dashboard() {
         <h1 className="dashboard-intro-title">{t('Know your engines.')}<br /><span>{t('Before they fail.')}</span></h1>
         <p className="dashboard-intro-description">{t('Predictive intelligence for turbofan engine health, remaining useful life, and maintenance planning.')}</p>
       </section>
+
       <PageHeading
         eyebrow="FLEET MONITORING"
         title="Fleet overview"
@@ -51,6 +53,10 @@ export default function Dashboard() {
         )}
       />
 
+      {/* NEW: Comprehensive Engine Health Diagnosis Section */}
+      <EngineHealthDiagnosis engines={engines} />
+
+      {/* Fleet Monitoring & Recent Predictions Grid */}
       <div className="content-grid dashboard-grid">
         <Panel className="monitoring-panel">
           <PanelHeading
