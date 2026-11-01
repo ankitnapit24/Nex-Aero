@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Search } from 'lucide-react';
+import { ArrowDown, ArrowRight, ArrowUp, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api, { getApiErrorMessage } from '../services/api';
 import { formatEngine, formatRul, PageHeading, Panel, PanelHeading, RiskBadge, StateBlock } from '../components/UI/Shared';
@@ -59,25 +59,24 @@ export default function EngineFleet() {
     <div className="page-stack">
       <PageHeading eyebrow="NASA C-MAPSS FD001 · TEST FLEET" title="Engine monitoring" description="Browse backend estimates and open an engine’s historical telemetry." />
       <Panel>
-        <PanelHeading title="Fleet records" description={`${loading ? t('Loading') : error ? t('Unavailable') : engines.length} ${t('engines returned by the API · lowest RUL first by default.')}`} />
+        <PanelHeading title="Fleet records" description={loading ? t('Loading fleet…') : error ? t('Unavailable') : `${engines.length} ${t('engines · sorted by estimated RUL.')}`} />
         <div className="filter-row fleet-filters">
           <label className="search-field"><Search size={15} aria-hidden="true" /><span className="sr-only">{t('Search engine number')}</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t('Find engine by number')} /></label>
           <label className="filter-field"><span>{t('Assessment tier')}</span><select className="form-select" value={tier} onChange={(event) => setTier(event.target.value)}><option value="ALL">{t('All tiers')}</option>{tiers.map((item) => <option key={item} value={item}>{t(item)}</option>)}</select></label>
           <span className="filter-count">{loading ? t('Loading…') : `${visibleEngines.length} ${t('shown')}`}</span>
         </div>
         {loading || error || visibleEngines.length === 0 ? <StateBlock loading={loading} error={error} empty={!loading && !error ? 'No engines match the selected filters.' : ''} onRetry={loadFleet} /> : (
-          <div className="table-scroll"><table className="data-table"><thead><tr><th>{sortButton('Engine', 'engine_id')}</th><th>{sortButton('Last cycle', 'last_cycle')}</th><th>{sortButton('Estimated RUL', 'predicted_rul')}</th><th>{t('Assessment tier')}</th><th>{t('Test-set reference RUL')}</th><th /></tr></thead><tbody>
+          <div className="table-scroll"><table className="data-table fleet-record-table"><colgroup><col className="fleet-engine-column" /><col className="fleet-cycle-column" /><col className="fleet-rul-column" /><col className="fleet-tier-column" /><col className="fleet-action-column" /></colgroup><thead><tr><th>{sortButton('Engine', 'engine_id')}</th><th>{sortButton('Last cycle', 'last_cycle')}</th><th>{sortButton('Estimated RUL', 'predicted_rul')}</th><th>{t('Assessment tier')}</th><th aria-label={t('Details')} /></tr></thead><tbody>
             {visibleEngines.map((engine) => <tr key={engine.engine_id}>
-              <td><Link className="table-primary-link" to={`/engines/${engine.engine_id}`}>{formatEngine(engine.engine_id)}</Link><span className="table-subtext">{engine.dataset_split} split</span></td>
+              <td><Link className="table-primary-link" to={`/engines/${engine.engine_id}`}>{formatEngine(engine.engine_id)}</Link></td>
               <td className="numeric">{engine.last_cycle}</td>
               <td className="numeric rul-value">{formatRul(engine.predicted_rul)}</td>
               <td><RiskBadge tier={engine.urgency_tier} /></td>
-              <td className="numeric">{formatRul(engine.true_rul)}</td>
-              <td><Link className="text-link" to={`/engines/${engine.engine_id}`}>{t('Inspect')}</Link></td>
+              <td><Link className="fleet-inspect-link" to={`/engines/${engine.engine_id}`}><span>{t('Inspect')}</span><ArrowRight size={13} /></Link></td>
             </tr>)}
           </tbody></table></div>
         )}
-        <div className="panel-footnote">{t('Risk categories are configured demonstration thresholds only. Test-set reference RUL is ground truth supplied for offline dataset evaluation.')}</div>
+        <div className="panel-footnote">{t('Risk categories are configured demonstration thresholds only.')}</div>
       </Panel>
     </div>
   );
