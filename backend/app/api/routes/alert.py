@@ -7,13 +7,10 @@ from backend.app.database.session import get_db, Base, engine
 from backend.app.database.models import Alert
 from backend.app.schemas.alert import AlertCreate, AlertUpdate, AlertResponse, AlertListResponse
 from backend.app.services.engine_service import engine_service
-from ml.inference.predictor import RULPredictor
-
-# Ensure tables exist
-Base.metadata.create_all(bind=engine)
+from ml.inference.predictor import get_predictor
 
 router = APIRouter()
-predictor = RULPredictor()
+predictor = get_predictor()
 
 def _seed_alerts_if_empty(db: Session):
     """Seed initial alerts from fleet test set if database table is currently empty."""

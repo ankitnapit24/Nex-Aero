@@ -2,6 +2,11 @@
 Nex Aero - SHAP Explainability Engine
 Generates genuine local TreeSHAP feature attributions and global feature rankings
 for Random Forest RUL predictions on turbofan engine telemetry.
+
+Optimized for low-memory environments (Render Free):
+- Avoids eager TreeExplainer construction at module import.
+- Reuses the shared model pipeline to prevent duplicate 50MB+ model allocations.
+- Initializes TreeSHAP on demand when explanations are requested.
 """
 
 import os
@@ -16,39 +21,67 @@ if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
 from ml.config import DEFAULT_FEATURE_COLUMNS
-from ml.inference.predictor import SENSOR_DESCRIPTIONS
+from ml.inference.predictor import SENSOR_DESCRIPTIONS, get_predictor, RULPredictor
+
+_GLOBAL_EXPLAINER: Optional["SHAPExplainer"] = None
+
 
 class SHAPExplainer:
-    def __init__(self, model_path: Optional[str] = None, metadata_path: Optional[str] = None):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        metadata_path: Optional[str] = None,
+        lazy: bool = True
+    ):
         base_dir = BASE_DIR
         self.model_path = model_path or os.path.join(base_dir, "ml", "models", "rf_fd001_pipeline.joblib")
         self.metadata_path = metadata_path or os.path.join(base_dir, "ml", "models", "rf_fd001_metadata.json")
-        self.model = None
-        self.explainer = None
-        self.metadata = {}
-        self._initialize()
+        self._model = None
+        self._explainer = None
+        self._metadata = None
+        self._predictor: Optional[RULPredictor] = None
 
-    def _initialize(self):
-        import joblib
-        if os.path.exists(self.model_path):
-            self.model = joblib.load(self.model_path)
-            if hasattr(self.model, "n_jobs"):
-                self.model.n_jobs = 1
+        if not lazy:
+            self._ensure_explainer()
 
-        if os.path.exists(self.metadata_path):
-            try:
-                with open(self.metadata_path, "r") as f:
-                    self.metadata = json.load(f)
-            except Exception:
-                self.metadata = {}
+    def _get_predictor(self) -> RULPredictor:
+        if self._predictor is None:
+            base_dir = BASE_DIR
+            default_path = os.path.join(base_dir, "ml", "models", "rf_fd001_pipeline.joblib")
+            if self.model_path == default_path:
+                self._predictor = get_predictor(lazy=True)
+            else:
+                self._predictor = RULPredictor(model_path=self.model_path, metadata_path=self.metadata_path, lazy=True)
+        return self._predictor
 
-        # Initialize TreeExplainer
+    @property
+    def model(self):
+        if self._model is None:
+            pred = self._get_predictor()
+            self._model = pred.model
+        return self._model
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        if self._metadata is None:
+            self._metadata = self._get_predictor().metadata
+        return self._metadata
+
+    @property
+    def explainer(self):
+        if self._explainer is None:
+            self._ensure_explainer()
+        return self._explainer
+
+    def _ensure_explainer(self):
+        if self._explainer is not None:
+            return
         if self.model is not None:
             try:
                 import shap
-                self.explainer = shap.TreeExplainer(self.model)
-            except Exception as e:
-                self.explainer = None
+                self._explainer = shap.TreeExplainer(self.model)
+            except Exception:
+                self._explainer = None
 
     @property
     def expected_features(self) -> List[str]:
@@ -67,16 +100,17 @@ class SHAPExplainer:
         df = pd.DataFrame([{col: float(row_dict[col]) for col in features}])
         raw_pred = float(self.model.predict(df)[0]) if self.model is not None else 0.0
 
-        if self.explainer is not None:
+        explainer_instance = self.explainer
+        if explainer_instance is not None:
             try:
-                shap_vals = self.explainer.shap_values(df)
+                shap_vals = explainer_instance.shap_values(df)
                 # TreeExplainer for Regressor returns 2D array [1, n_features] or 1D [n_features]
                 if isinstance(shap_vals, list):
                     vals = shap_vals[0]
                 else:
                     vals = shap_vals[0] if shap_vals.ndim > 1 else shap_vals
 
-                ev = getattr(self.explainer, "expected_value", 100.0)
+                ev = getattr(explainer_instance, "expected_value", 100.0)
                 if isinstance(ev, (list, np.ndarray)):
                     expected_val = float(ev[0])
                 else:
@@ -104,7 +138,7 @@ class SHAPExplainer:
                     "top_positive_features": [c for c in contributions if c["shap_value"] > 0][:5],
                     "top_negative_features": [c for c in contributions if c["shap_value"] < 0][:5]
                 }
-            except Exception as e:
+            except Exception:
                 pass
 
         # Fallback to feature importance normalized attribution
@@ -113,7 +147,6 @@ class SHAPExplainer:
         for col in features:
             val = float(row_dict[col])
             weight = importances.get(col, 0.05)
-            # Heuristic delta
             fallback_contrib.append({
                 "feature": col,
                 "description": SENSOR_DESCRIPTIONS.get(col, col),
@@ -132,5 +165,14 @@ class SHAPExplainer:
             "top_negative_features": fallback_contrib[:5]
         }
 
-# Global singleton
-shap_explainer = SHAPExplainer()
+
+def get_shap_explainer(lazy: bool = True) -> SHAPExplainer:
+    """Returns the shared SHAPExplainer instance."""
+    global _GLOBAL_EXPLAINER
+    if _GLOBAL_EXPLAINER is None:
+        _GLOBAL_EXPLAINER = SHAPExplainer(lazy=lazy)
+    return _GLOBAL_EXPLAINER
+
+
+# Lazy singleton instance for backwards-compatible imports
+shap_explainer = SHAPExplainer(lazy=True)

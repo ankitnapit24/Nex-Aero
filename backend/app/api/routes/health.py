@@ -3,19 +3,9 @@ from sqlalchemy import text
 from backend.app.core.config import settings
 from backend.app.database.session import SessionLocal
 from backend.app.services.engine_service import engine_service
-from ml.inference.predictor import RULPredictor
+from ml.inference.predictor import get_predictor
 
 router = APIRouter()
-_cached_predictor = None
-
-def get_predictor():
-    global _cached_predictor
-    if _cached_predictor is None:
-        try:
-            _cached_predictor = RULPredictor()
-        except Exception:
-            _cached_predictor = None
-    return _cached_predictor
 
 @router.get("/health")
 def get_health():
@@ -38,8 +28,8 @@ def get_health():
     except Exception:
         db_ok = False
 
-    # Check dataset availability
-    dataset_ready = engine_service.test_df is not None and not engine_service.test_df.empty
+    # Check dataset availability without loading 13k rows into memory
+    dataset_ready = engine_service.is_dataset_available()
 
     # Determine overall system state
     if rf_model_loaded and db_ok and anomaly_detector_loaded and dataset_ready:

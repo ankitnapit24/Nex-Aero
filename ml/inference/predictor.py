@@ -6,6 +6,7 @@ Includes Isolation Forest anomaly detection and local sensor drift attribution.
 
 import os
 import json
+import threading
 import joblib
 import numpy as np
 import pandas as pd
@@ -33,65 +34,184 @@ SENSOR_DESCRIPTIONS = {
     "sensor_21": "LPT Coolant Bleed (lbm/s)",
 }
 
+# Global process-wide cache and lock to prevent duplicate model loads and memory bloat
+_ARTIFACT_CACHE: Dict[tuple, Dict[str, Any]] = {}
+_CACHE_LOCK = threading.Lock()
+_GLOBAL_PREDICTOR: Optional["RULPredictor"] = None
+
+
 class RULPredictor:
-    def __init__(self, model_path: Optional[str] = None, metadata_path: Optional[str] = None):
+    def __init__(
+        self,
+        model_path: Optional[str] = None,
+        metadata_path: Optional[str] = None,
+        lazy: bool = True
+    ):
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.model_path = model_path or os.path.join(base_dir, "ml", "models", "rf_fd001_pipeline.joblib")
         self.metadata_path = metadata_path or os.path.join(base_dir, "ml", "models", "rf_fd001_metadata.json")
         self.anomaly_path = os.path.join(base_dir, "ml", "models", "iforest_fd001.joblib")
         self.anomaly_meta_path = os.path.join(base_dir, "ml", "models", "iforest_metadata.json")
         self.baseline_stats_path = os.path.join(base_dir, "ml", "models", "baseline_sensor_stats.json")
-        
-        self.model = None
-        self.anomaly_model = None
-        self.anomaly_features = ANOMALY_FEATURE_COLUMNS
-        self.baseline_stats = {}
-        self.metadata = {}
-        self._load_artifacts()
 
-    def _load_artifacts(self):
-        if not os.path.exists(self.model_path):
-            raise FileNotFoundError(
-                f"Model artifact not found at {self.model_path}. "
-                f"Please run 'python scripts/train_model.py' first."
-            )
-        
-        self.model = joblib.load(self.model_path)
-        # Ensure single-threaded fast inference to avoid multiprocessing overhead / IPC issues
-        if hasattr(self.model, "n_jobs"):
-            self.model.n_jobs = 1
+        self._model = None
+        self._anomaly_model = None
+        self._anomaly_features = ANOMALY_FEATURE_COLUMNS
+        self._baseline_stats = {}
+        self._metadata = {}
+        self._is_loaded = False
 
-        if os.path.exists(self.metadata_path):
-            with open(self.metadata_path, "r") as f:
-                self.metadata = json.load(f)
-        else:
-            self.metadata = {
-                "version": "1.0.0",
-                "features": DEFAULT_FEATURE_COLUMNS
+        if not lazy:
+            self._ensure_loaded()
+
+    @property
+    def cache_key(self) -> tuple:
+        return (
+            self.model_path,
+            self.metadata_path,
+            self.anomaly_path,
+            self.anomaly_meta_path,
+            self.baseline_stats_path,
+        )
+
+    def is_model_available(self) -> bool:
+        """Checks whether the serialized model artifact file exists on disk."""
+        return os.path.exists(self.model_path)
+
+    def is_loaded(self) -> bool:
+        """Returns True if model artifacts are loaded in memory."""
+        return self._is_loaded
+
+    def _ensure_loaded(self):
+        """Loads model artifacts only once per unique set of paths."""
+        if self._is_loaded:
+            return
+
+        with _CACHE_LOCK:
+            if self._is_loaded:
+                return
+
+            key = self.cache_key
+            if key in _ARTIFACT_CACHE:
+                cached = _ARTIFACT_CACHE[key]
+                self._model = cached["model"]
+                self._anomaly_model = cached["anomaly_model"]
+                self._anomaly_features = cached["anomaly_features"]
+                self._baseline_stats = cached["baseline_stats"]
+                self._metadata = cached["metadata"]
+                self._is_loaded = True
+                return
+
+            if not os.path.exists(self.model_path):
+                raise FileNotFoundError(
+                    f"Model artifact not found at {self.model_path}. "
+                    f"Please run 'python scripts/train_model.py' first."
+                )
+
+            # Load primary Random Forest RUL pipeline
+            model = joblib.load(self.model_path)
+            if hasattr(model, "n_jobs"):
+                model.n_jobs = 1
+
+            if os.path.exists(self.metadata_path):
+                with open(self.metadata_path, "r", encoding="utf-8") as f:
+                    metadata = json.load(f)
+            else:
+                metadata = {
+                    "version": "1.0.0",
+                    "features": DEFAULT_FEATURE_COLUMNS,
+                }
+
+            # Load Isolation Forest if present
+            anomaly_model = None
+            anomaly_features = ANOMALY_FEATURE_COLUMNS
+            if os.path.exists(self.anomaly_path):
+                try:
+                    anomaly_model = joblib.load(self.anomaly_path)
+                    if hasattr(anomaly_model, "n_jobs"):
+                        anomaly_model.n_jobs = 1
+                    if os.path.exists(self.anomaly_meta_path):
+                        with open(self.anomaly_meta_path, "r", encoding="utf-8") as f:
+                            meta = json.load(f)
+                            anomaly_features = meta.get("features", ANOMALY_FEATURE_COLUMNS)
+                except Exception:
+                    anomaly_model = None
+
+            # Load baseline reference statistics
+            baseline_stats = {}
+            if os.path.exists(self.baseline_stats_path):
+                try:
+                    with open(self.baseline_stats_path, "r", encoding="utf-8") as f:
+                        baseline_stats = json.load(f)
+                except Exception:
+                    baseline_stats = {}
+
+            # Cache loaded instances globally
+            _ARTIFACT_CACHE[key] = {
+                "model": model,
+                "anomaly_model": anomaly_model,
+                "anomaly_features": anomaly_features,
+                "baseline_stats": baseline_stats,
+                "metadata": metadata,
             }
 
-        # Load Isolation Forest if present
-        if os.path.exists(self.anomaly_path):
-            try:
-                self.anomaly_model = joblib.load(self.anomaly_path)
-                if hasattr(self.anomaly_model, "n_jobs"):
-                    self.anomaly_model.n_jobs = 1
-                if os.path.exists(self.anomaly_meta_path):
-                    with open(self.anomaly_meta_path, "r") as f:
-                        meta = json.load(f)
-                        self.anomaly_features = meta.get("features", ANOMALY_FEATURE_COLUMNS)
-            except Exception:
-                self.anomaly_model = None
-        else:
-            self.anomaly_model = None
+            self._model = model
+            self._anomaly_model = anomaly_model
+            self._anomaly_features = anomaly_features
+            self._baseline_stats = baseline_stats
+            self._metadata = metadata
+            self._is_loaded = True
 
-        # Load baseline reference statistics
-        if os.path.exists(self.baseline_stats_path):
-            try:
-                with open(self.baseline_stats_path, "r") as f:
-                    self.baseline_stats = json.load(f)
-            except Exception:
-                self.baseline_stats = {}
+    @property
+    def model(self):
+        if not self._is_loaded:
+            self._ensure_loaded()
+        return self._model
+
+    @model.setter
+    def model(self, value):
+        self._model = value
+        self._is_loaded = True
+
+    @property
+    def anomaly_model(self):
+        if not self._is_loaded:
+            self._ensure_loaded()
+        return self._anomaly_model
+
+    @anomaly_model.setter
+    def anomaly_model(self, value):
+        self._anomaly_model = value
+
+    @property
+    def anomaly_features(self) -> List[str]:
+        if not self._is_loaded:
+            self._ensure_loaded()
+        return self._anomaly_features
+
+    @anomaly_features.setter
+    def anomaly_features(self, value: List[str]):
+        self._anomaly_features = value
+
+    @property
+    def metadata(self) -> Dict[str, Any]:
+        if not self._is_loaded:
+            self._ensure_loaded()
+        return self._metadata
+
+    @metadata.setter
+    def metadata(self, value: Dict[str, Any]):
+        self._metadata = value
+
+    @property
+    def baseline_stats(self) -> Dict[str, Any]:
+        if not self._is_loaded:
+            self._ensure_loaded()
+        return self._baseline_stats
+
+    @baseline_stats.setter
+    def baseline_stats(self, value: Dict[str, Any]):
+        self._baseline_stats = value
 
     @property
     def expected_features(self) -> List[str]:
@@ -205,3 +325,12 @@ class RULPredictor:
             "evaluated_at": datetime.now(timezone.utc).isoformat(),
             "disclaimer": "Experimental decision-support heuristic. Does NOT certify airworthiness or authorize maintenance."
         }
+
+
+def get_predictor(lazy: bool = True) -> RULPredictor:
+    """Returns the shared process-wide RULPredictor instance."""
+    global _GLOBAL_PREDICTOR
+    if _GLOBAL_PREDICTOR is None:
+        _GLOBAL_PREDICTOR = RULPredictor(lazy=lazy)
+    return _GLOBAL_PREDICTOR
+

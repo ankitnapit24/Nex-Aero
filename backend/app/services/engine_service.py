@@ -1,27 +1,66 @@
 import os
+import threading
 import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Optional
 
 from backend.app.schemas.engine import EngineSummary, EngineDetail, EngineTelemetryPoint
 from ml.data_processing.loader import load_cmapss_test, load_cmapss_test_rul
-from ml.inference.predictor import RULPredictor
+from ml.inference.predictor import RULPredictor, get_predictor
 
 class EngineService:
     def __init__(self):
         base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
         self.data_dir = os.path.join(base_dir, "data", "raw")
-        self.test_df: Optional[pd.DataFrame] = None
-        self.test_rul: Optional[pd.Series] = None
-        self.predictor = RULPredictor()
-        self._load_data()
+        self._test_df: Optional[pd.DataFrame] = None
+        self._test_rul: Optional[pd.Series] = None
+        self._cached_summaries: Optional[List[EngineSummary]] = None
+        self._lock = threading.Lock()
 
-    def _load_data(self):
-        if os.path.exists(os.path.join(self.data_dir, "test_FD001.txt")):
-            self.test_df = load_cmapss_test(self.data_dir)
-            self.test_rul = load_cmapss_test_rul(self.data_dir)
+    @property
+    def predictor(self) -> RULPredictor:
+        return get_predictor()
+
+    def is_dataset_available(self) -> bool:
+        """Checks if raw test dataset files exist on disk without loading into RAM."""
+        return os.path.exists(os.path.join(self.data_dir, "test_FD001.txt"))
+
+    def _ensure_data_loaded(self):
+        if self._test_df is not None:
+            return
+        with self._lock:
+            if self._test_df is not None:
+                return
+            if os.path.exists(os.path.join(self.data_dir, "test_FD001.txt")):
+                self._test_df = load_cmapss_test(self.data_dir)
+                self._test_rul = load_cmapss_test_rul(self.data_dir)
+
+    @property
+    def test_df(self) -> Optional[pd.DataFrame]:
+        if self._test_df is None:
+            self._ensure_data_loaded()
+        return self._test_df
+
+    @test_df.setter
+    def test_df(self, df: Optional[pd.DataFrame]):
+        self._test_df = df
+        self._cached_summaries = None
+
+    @property
+    def test_rul(self) -> Optional[pd.Series]:
+        if self._test_rul is None:
+            self._ensure_data_loaded()
+        return self._test_rul
+
+    @test_rul.setter
+    def test_rul(self, rul: Optional[pd.Series]):
+        self._test_rul = rul
+        self._cached_summaries = None
 
     def list_engines(self) -> List[EngineSummary]:
+        if self._cached_summaries is not None:
+            return self._cached_summaries
+
         if self.test_df is None:
             return []
 
@@ -54,6 +93,7 @@ class EngineService:
 
         # Sort by urgency: lowest predicted RUL first
         summaries.sort(key=lambda e: e.predicted_rul if e.predicted_rul is not None else 9999)
+        self._cached_summaries = summaries
         return summaries
 
     def get_engine_detail(self, engine_id: int) -> Optional[EngineDetail]:

@@ -8,14 +8,11 @@ from backend.app.database.session import get_db, Base, engine
 from backend.app.database.models import PredictionLog
 from backend.app.schemas.prediction import TelemetryInput, PredictionResponse, PredictionRecordItem, ReplayStep
 from backend.app.services.engine_service import engine_service
-from ml.inference.predictor import RULPredictor
-from ml.inference.explainer import shap_explainer
-
-# Ensure tables exist
-Base.metadata.create_all(bind=engine)
+from ml.inference.predictor import get_predictor
+from ml.inference.explainer import get_shap_explainer, shap_explainer
 
 router = APIRouter()
-predictor = RULPredictor()
+predictor = get_predictor()
 
 @router.post("/predict", response_model=PredictionResponse)
 def predict_rul(payload: TelemetryInput, db: Session = Depends(get_db)):
