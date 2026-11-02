@@ -52,7 +52,7 @@ flowchart TD
     FastAPI --> Dataset
 ```
 
-For complete documentation:
+For complete documentation  :
 - [Free-Tier Deployment Guide](docs/deployment-guide.md)
 - [Free-Tier Infrastructure & Limitations](docs/free-tier-limitations.md)
 - [Pre-Deployment Audit Matrix](docs/free-deployment-audit.md)
