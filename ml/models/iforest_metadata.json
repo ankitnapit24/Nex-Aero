@@ -36,4 +36,4 @@
   "random_state": 42,
   "trained_at": "2026-10-31T11:34:53.325065+00:00",
   "notes": "Physical sensor and setting parameters only. Temporal cycle excluded to prevent age bias."
-}
+}  
