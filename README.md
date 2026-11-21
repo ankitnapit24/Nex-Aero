@@ -7,7 +7,7 @@
 [![TailwindCSS](https://img.shields.io/badge/TailwindCSS-v4-38bdf8.svg)](https://tailwindcss.com)
 [![NASA C-MAPSS](https://img.shields.io/badge/NASA%20Data-C--MAPSS%20FD001-orange.svg)](https://data.nasa.gov)
 [![Deploy to Render](https://img.shields.io/badge/Deploy-Render%20Free-46E3B7.svg)](https://render.com)
-[![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel%20Hobby-black.svg)](https://vercel.com)
+[![Deploy to Vercel](https://img.shields.io/badge/Deploy-Vercel%20Hobby-black.svg)](https://vercel.com) 
 
 Nex Aero is an enterprise-grade, leak-free machine-learning aviation reliability platform designed to estimate Remaining Useful Life (RUL) and detect sensor anomalies in commercial turbofan aircraft engines based on the NASA C-MAPSS FD001 dataset.
 
