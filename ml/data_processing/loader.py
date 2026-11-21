@@ -6,7 +6,7 @@ Parses NASA C-MAPSS FD001 text files, validates data integrity, and computes RUL
 import os
 import pandas as pd
 import numpy as np
-from typing import Tuple, Optional 
+from typing import Tuple, Optional  
 from ml.config import ALL_COLUMNS, INDEX_COLUMNS, SENSOR_COLUMNS
 
 def read_raw_cmapss_file(filepath: str) -> pd.DataFrame:
